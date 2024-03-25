@@ -1,0 +1,4 @@
+*ipynb
+.ipynb*
+__pycache__/
+scratch_output/
