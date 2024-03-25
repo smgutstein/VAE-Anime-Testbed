@@ -165,6 +165,7 @@ class VAE_Trainer:
 
         recon_loss_list = []
         kl_loss_list = []
+        adj_kl_factor_list = []
         grad_list = []
         mu_list=[]
         log_var_list=[]
@@ -218,6 +219,7 @@ class VAE_Trainer:
  
                     recon_loss_list.append(loss_recon.numpy())
                     kl_loss_list.append(loss_kl.numpy())
+                    adj_kl_factor_list.append(kl_adj_factor)
 
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
@@ -237,7 +239,7 @@ class VAE_Trainer:
 
                     if step % 10 == 0:
                         with open(self.stats_dir / Path("loss_lists.pkl"), "wb") as f:
-                            pickle.dump([recon_loss_list, kl_loss_list],f)
+                            pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list],f)
                         with open(self.stats_dir / Path("mu_log_var_lists.pkl"), "wb") as f:
                             pickle.dump([mu_list, log_var_list],f)
                         with open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "wb") as f:
