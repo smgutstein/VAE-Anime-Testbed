@@ -160,6 +160,7 @@ class VAE_Trainer:
 
         # Initialize performance trackers
         kl_adj_factor = 1e-6 
+        kl_adj_factor_max = 250 
         prev_loss_recon = np.inf
         prev_loss_kl = np.inf
 
@@ -199,11 +200,12 @@ class VAE_Trainer:
                             kl_adj_factor /= 2
                         elif (curr_loss_recon < prev_loss_recon) and (curr_loss_kl > prev_loss_kl):
                             kl_adj_factor *= 2
+                        kl_adj_facor = min(kl_adj_factor, kl_adj_factor_max
                         prev_loss_recon = curr_loss_recon
                         prev_loss_kl = curr_loss_kl
 
                         # Calculate Total Effective Loss
-                        loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f}  \n")
+                        loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f} -- {lkl_adj_factor:.4f}  \n")
                         loss_tot = loss_recon + kl_adj_factor*loss_kl
                         
  
