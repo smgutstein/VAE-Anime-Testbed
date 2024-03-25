@@ -1,3 +1,4 @@
+import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
@@ -156,7 +157,12 @@ class Datasets():
 
 
 if __name__ == '__main__':
-    data = Datasets()
+    parser = argparse.ArgumentParser(description= 'Specify output directory')
+    parser.add_argument('-o', '--output_dir', type=str, 
+                        default='scratch_output', help='Output directory')
+    args = parser.parse_args()
+    
+    data = Datasets(args.output_dir)
     data.set_data_params()
     data.download_data()
     data.make_train_and_validation_sets()

@@ -1,3 +1,4 @@
+import argparse
 import imageio.v2 as imageio
 import matplotlib.pyplot as plt
 import numpy as np
@@ -103,7 +104,10 @@ class AnalyzeResults():
         plt.savefig(self.stats_dir / Path('Recon_KL_Comp_1.png'))
 
 if __name__ == "__main__":
-    ar = AnalyzeResults()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-o', '--output_dir', type=str, default="scratch_output") 
+    args = parser.parse_args()
+    ar = AnalyzeResults(args.output_dir)
     ar.make_images_movie()
     ar.make_mu_log_var_graphs()
     ar.compare_recon_kl_losses()

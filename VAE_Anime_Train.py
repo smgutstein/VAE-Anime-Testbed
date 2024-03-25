@@ -1,3 +1,4 @@
+import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
@@ -241,7 +242,13 @@ class VAE_Trainer:
         self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
 
 if __name__ == "__main__":
-    vae = VAE_Trainer()
+    parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
+    parser.add_argument('-e', '--epochs', type=int, default=40, help='Number of epochs')
+    parser.add_argument('-l', '--LR', type=float, default=0.0004, help='Learning Rate')
+    parser.add_argument('-o', '--output_dir', type=str, default='scratch_output', help='Output directory')
+    args = parser.parse_args()
+
+    vae = VAE_Trainer(args.epochs, args.LR, args.output_dir)
     vae.vae.show_model()
     vae.data.display_sample_data('t', 25)
     vae.data.display_sample_data('v', 18)
