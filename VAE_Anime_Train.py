@@ -159,7 +159,7 @@ class VAE_Trainer:
         print("Start Time: ", ctime())
 
         # Initialize performance trackers
-        kl_adj_factor = 1 
+        kl_adj_factor = 1e-6 
         prev_loss_recon = np.inf
         prev_loss_kl = np.inf
 
