@@ -39,8 +39,8 @@ class VAE_Trainer:
             parent_output_dir = Path("expts")
             parent_output_dir.mkdir(parents=True, exist_ok=True)
             num_expts = len([d for d in parent_output_dir.iterdir() 
-                         if d.is_dir()])
-            self.output_dir = self.parent_output_dir / f"expt_{num_expts+1}"
+                             if d.is_dir() and "original_images" not in str(d)])
+            self.output_dir = parent_output_dir / f"expt_{num_expts+1}"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Record the git hash used for this run
