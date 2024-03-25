@@ -158,7 +158,11 @@ class VAE_Trainer:
         last_time = start_time
         print("Start Time: ", ctime())
 
-        # Initialize performance tracking lists
+        # Initialize performance trackers
+        kl_adj_factor = 1 
+        prev_loss_recon = np.inf
+        prev_loss_kl = np.inf
+
         recon_loss_list = []
         kl_loss_list = []
         grad_list = []
@@ -185,9 +189,21 @@ class VAE_Trainer:
                         # get KLD regularization loss 
                         loss_kl = self.vae.vae_net.losses[0]
 
+                        # Get Current Losses
+                        curr_loss_recon = loss_recon.numpy()
+                        curr_loss_kl = loss_kl.numpy()
+
+                        # Scale losses
+                        if (curr_loss_recon >= prev_loss_recon) and (curr_loss_kl <= prev_loss_kl):
+                            kl_adj_factor /= 2
+                        elif (curr_loss_recon < prev_loss_recon) and (curr_loss_kl > prev_loss_kl):
+                            kl_adj_factor *= 2
+                        prev_loss_recon = curr_loss_recon
+                        prev_loss_kl = curr_loss_kl
+
                         # Calculate Total Effective Loss
                         loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f}  \n")
-                        loss_tot = loss_recon + loss_kl
+                        loss_tot = loss_recon + kl_adj_factor*loss_kl
                         
  
                     # Get gradient of tital effective loss w/resp to trainable params
