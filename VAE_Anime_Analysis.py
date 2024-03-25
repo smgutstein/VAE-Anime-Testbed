@@ -116,33 +116,29 @@ class AnalyzeResults():
 
 
         fig, axes = plt.subplots(2,2)  # Create a figure containing a single axes.
-        axes[0][0].set_xlabel('Iteration')
+        axes[0][0].set_xlabel('Iteration',fontsize=8, labelpad=-2)
         axes[0][0].set_ylabel('Loss')
         axes[0][0].set_yscale('log')
         axes[0][0].plot(range(num_pts), recon_loss_list, label="recon loss")
         axes[0][0].plot(range(num_pts), kl_loss_list, label="kl loss")
         axes[0][0].set_ylim([.0001,1000])
-        #axes[0][0].legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-        axes[0][1].set_xlabel('Iteration')
+        axes[0][1].set_xlabel('Iteration',fontsize=8, labelpad=-2)
         axes[0][1].set_ylabel('Adj KL Loss')
         axes[0][1].yaxis.set_major_formatter(formatter)
         axes[0][1].plot(range(num_pts), adj_kl_factor_list, label="adj kl loss", color='#ff7f0e')
         axes[0][1].yaxis.tick_right()
         axes[0][1].yaxis.set_label_position("right")
-        #axes[0][1].legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
         axes[1][0].set_xlabel('Iteration')
         axes[1][0].set_ylabel('Recon Loss')
         axes[1][0].plot(range(num_pts), recon_loss_list, label="recon loss")
-        #axes[1][0].legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
         axes[1][1].set_xlabel('Iteration')
         axes[1][1].set_ylabel('KL Loss')
         axes[1][1].yaxis.tick_right()
         axes[1][1].yaxis.set_label_position("right")
         axes[1][1].plot(range(num_pts), kl_loss_list, label="kl loss", color='#ff7f0e')
-        #axes[1][1].legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
         plt.savefig(self.stats_dir / Path('Recon_KL_Comp_2.png'))
 
