@@ -205,7 +205,7 @@ class VAE_Trainer:
                         prev_loss_kl = curr_loss_kl
 
                         # Calculate Total Effective Loss
-                        loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f} -- {lkl_adj_factor:.4f}  \n")
+                        loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f} -- {kl_adj_factor:.4f}  \n")
                         loss_tot = loss_recon + kl_adj_factor*loss_kl
                         
  
