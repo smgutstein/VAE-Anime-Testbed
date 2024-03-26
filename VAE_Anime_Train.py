@@ -16,7 +16,10 @@ from VAE_Anime_Datasets import Datasets
 from VAE_Anime_Full_Model import VAE_Model
 
 def get_git_hash():
-    return sp.check_output(['git', 'log', '-n', '1']).decode("utf-8").strip()
+    hash_str =  sp.check_output(['git', 'log', '-n', '1']).decode("utf-8").strip()
+    diff_str = sp.check_output(['git', 'diff']).decode("utf-8").strip()
+    output_str = hash_str + '\n\n' + diff_str
+    return output_str
 
 
 class VAE_Trainer:
@@ -160,7 +163,7 @@ class VAE_Trainer:
 
         # Initialize performance trackers
         kl_adj_factor = 1e-6 
-        kl_adj_factor_max = 250 
+        kl_adj_factor_max = 1500
         prev_loss_recon = np.inf
         prev_loss_kl = np.inf
 
@@ -174,7 +177,7 @@ class VAE_Trainer:
         log_var_list2=[]
 
         with open(self.stats_dir / Path("losses_file.txt"), 'w') as loss_file:
-            loss_file.write("Epoch -- Step -- Recon Loss -- KL Loss \n")
+            loss_file.write("Epoch -- Step -- Recon Loss -- KL Loss -- KL_Adj_Factor\n")
             for epoch in range(self.epochs):
                 print('Start of epoch %d at %s' % (epoch, ctime()))
     
