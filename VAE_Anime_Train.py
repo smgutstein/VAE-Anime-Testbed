@@ -2,7 +2,8 @@ import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
-import subprocess as sp
+import shutil
+import sys
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -14,12 +15,9 @@ from time import time, ctime
 
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_Full_Model import VAE_Model
-
-def get_git_hash():
-    hash_str =  sp.check_output(['git', 'log', '-n', '1']).decode("utf-8").strip()
-    diff_str = sp.check_output(['git', 'diff']).decode("utf-8").strip()
-    output_str = hash_str + '\n\n' + diff_str
-    return output_str
+from utils import is_config_file
+from utils import read_config_file
+from utils import get_git_hash
 
 
 class VAE_Trainer:
@@ -29,22 +27,26 @@ class VAE_Trainer:
     mse_loss = tf.keras.losses.MeanSquaredError()
     bce_loss = tf.keras.losses.BinaryCrossentropy()
 
-    def __init__(self, epochs=40, LR=0.0004, 
-                 output_dir="scratch_output"):
+    def __init__(self, config_file="config.ini"):
+        # Load the config file
+        assert Path(config_file).exists(), "Config file does not exist"
+        assert is_config_file(config_file), "Invalid config file"
+        
+        self.config_file = config_file
+        self.load_config_file()
 
         # Initialize the VAE model
         self.vae = VAE_Model()
 
         # Set the output directories
-        if output_dir == "scratch_output":
-            self.output_dir = Path(output_dir)
-        else:
-            parent_output_dir = Path("expts")
-            parent_output_dir.mkdir(parents=True, exist_ok=True)
-            num_expts = len([d for d in parent_output_dir.iterdir() 
-                             if d.is_dir() and "original_images" not in str(d)])
-            self.output_dir = parent_output_dir / f"expt_{num_expts+1}"
+        parent_output_dir = Path(self.parent_dir)
+        parent_output_dir.mkdir(parents=True, exist_ok=True)
+        num_expts = len([d for d in parent_output_dir.iterdir() 
+                            if d.is_dir() and "original_images" not in str(d)])
+        self.output_dir = parent_output_dir / f"expt_{num_expts+1}"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(self.config_file, self.output_dir / Path("config.ini")) 
+
 
         # Record the git hash used for this run
         with open(self.output_dir / Path("Notes.txt"), 'w') as f:
@@ -77,8 +79,17 @@ class VAE_Trainer:
         self.fixed_gen_img_seeds = tf.random.normal(shape=[4, self.vae.latent_dim])
 
         # Training parameters
-        self.epochs = epochs
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=LR)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+
+    def load_config_file(self):
+        config = read_config_file(self.config_file)
+        
+        self.epochs = int(config.get('Training_Parameters', 'epochs'))      
+        self.learning_rate = float(config.get('Training_Parameters', 'learning_rate'))   
+        self.kl_adj_factor = float(config.get('Training_Parameters', 'kl_adj_factor'))  
+        self.kl_adj_factor_max = float(config.get('Training_Parameters', 'kl_adj_factor_max'))  
+        self.parent_dir = config.get('Output_Parameters', 'parent_dir')
+        self.save_net = bool(config.get('Output_Parameters', 'save_net'))
 
 
     def snapshot_vae_behavior (self, epoch=0, step=0, 
@@ -262,16 +273,23 @@ class VAE_Trainer:
         print("End Time", ctime())
         delta_time = str(timedelta(seconds = curr_time - start_time))
         print("Running Time", delta_time)
-        self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
+        if self.save_net:
+            self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
 
 if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python VAE_Anime_Train.py <config_file>") 
+        sys.exit(1)
+    if not is_config_file(sys.argv[1]): 
+        print("Invalid config file")
+        sys.exit(1) 
+
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
-    parser.add_argument('-e', '--epochs', type=int, default=40, help='Number of epochs')
-    parser.add_argument('-l', '--LR', type=float, default=0.0004, help='Learning Rate')
-    parser.add_argument('-o', '--output_dir', type=str, default='scratch_output', help='Output directory')
+    parser.add_argument('config_file', type=str, 
+                        default='config.ini', help='Config file')
     args = parser.parse_args()
 
-    vae = VAE_Trainer(args.epochs, args.LR, args.output_dir)
+    vae = VAE_Trainer(args.config_file)
     vae.vae.show_model()
     vae.data.display_sample_data('t', 25)
     vae.data.display_sample_data('v', 18)

@@ -1,18 +1,27 @@
 import argparse
 import imageio.v2 as imageio
 import matplotlib.pyplot as plt
-from matplotlib.ticker import EngFormatter
 import numpy as np
 import pickle
 
+from matplotlib.ticker import EngFormatter
 from pathlib import Path
 from tqdm import tqdm
+from utils import is_config_file
+from utils import read_config_file
+from utils import get_git_hash
 
 class AnalyzeResults():
-    def __init__(self, output_dir="scratch_output"):
+    def __init__(self, config_file="config.ini"):
+
+        # Load the config file
+        assert Path(config_file).exists(), "Config file does not exist"
+        assert is_config_file(config_file), "Invalid config file"
+        
+        self.config_file = config_file
 
         # Set the output directories
-        self.output_dir = Path(output_dir)
+        self.get_output_dir()
         self.raw_image_dir = self.output_dir / "raw_images"
 
         self.stats_dir = self.output_dir / "stats" 
@@ -26,6 +35,20 @@ class AnalyzeResults():
 
         self.movies_dir = self.output_dir / "movies"
         self.movies_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_output_dir(self): 
+        config = read_config_file(self.config_file)
+        self.parent_dir = config.get('Output_Parameters', 'parent_dir')
+        expt_dirs = [x.name for x in Path('./expts').iterdir() 
+                     if x.is_dir() and x.name.startswith('expt')]
+        expt_dirs.sort(key=lambda x:int(x[5:]))
+        curr_expt_dir = expt_dirs[-1]
+        self.output_dir = Path('./expts') / curr_expt_dir
+        
+    def get_analysis_dir(self):
+        self.load_config_file()
+
+        return self.parent_dir / "analysis"
 
     def make_images_movie(self):
 
@@ -43,7 +66,7 @@ class AnalyzeResults():
         frames.sort(key=frame_num)
 
         writer = imageio.get_writer(self.movies_dir / 'vae_movie.mp4', fps=10)
-        for curr_frame in tqdm(frames, desc='Processing frames'):
+        for curr_frame in tqdm(frames, desc='Processing Anime Frames'):
             im = imageio.imread(Path(curr_frame))
             writer.append_data(im)
         writer.close()
@@ -79,19 +102,21 @@ class AnalyzeResults():
             return graph_files
 
 
-        log_var_graph_files = make_graphs(log_var, 'Log Var', 
-                                          'log_var_', self.raw_log_var_graphs_dir)
-        mu_graph_files = make_graphs(mu, 'mu', 
-                                     'mu_', self.raw_mu_graphs_dir)
-        
         def make_movie(file_list, movie_name):
             writer = imageio.get_writer(self.movies_dir / movie_name, fps=20)
-            for file in tqdm(file_list, desc='Making movie'):
+            for file in tqdm(file_list, desc='Making movie for ' + movie_name[:-4]):
                 im = imageio.imread(file)
                 writer.append_data(im)
             writer.close()
 
+        # Make log var movie
+        log_var_graph_files = make_graphs(log_var, 'Log Var', 
+                                          'log_var_', self.raw_log_var_graphs_dir)
         make_movie(log_var_graph_files, 'log_var.mp4')
+
+        # Make mu movie
+        mu_graph_files = make_graphs(mu, 'mu', 
+                                     'mu_', self.raw_mu_graphs_dir)
         make_movie(mu_graph_files, 'mu.mp4')   
 
 
@@ -160,10 +185,13 @@ class AnalyzeResults():
         plt.savefig(self.stats_dir / Path('Recon_KL_Comp_2.png'))
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-o', '--output_dir', type=str, default="scratch_output") 
+
+    parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
+    parser.add_argument('config_file', type=str, nargs='?',
+                        default='config.ini', help='Config file')
     args = parser.parse_args()
-    ar = AnalyzeResults(args.output_dir)
+    
+    ar = AnalyzeResults(args.config_file)
     ar.make_images_movie()
     ar.make_mu_log_var_graphs()
     ar.compare_recon_kl_losses()    
