@@ -21,6 +21,9 @@ class AnalyzeResults():
         self.raw_log_var_graphs_dir = self.stats_dir / "raw_log_var_graphs"
         self.raw_log_var_graphs_dir.mkdir(parents=True, exist_ok=True)
 
+        self.raw_mu_graphs_dir = self.stats_dir / "raw_mu_graphs"
+        self.raw_mu_graphs_dir.mkdir(parents=True, exist_ok=True)
+
         self.movies_dir = self.output_dir / "movies"
         self.movies_dir.mkdir(parents=True, exist_ok=True)
 
@@ -48,35 +51,49 @@ class AnalyzeResults():
     def make_mu_log_var_graphs(self):
         with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
             mu, log_var = pickle.load(f)
-  
-        lower_lim = np.percentile(log_var, 5, axis=1).min()
-        upper_lim = np.percentile(log_var, 95, axis=1).max()
-        for ctr, data in enumerate(tqdm(log_var, desc="Processing log_var")):
-            #sort_data=np.sort(np.exp(data.numpy()))
-            sort_data=np.sort(data.numpy())
-            fig, ax = plt.subplots()  # Create a figure containing a single axes.
-            ax.set_xlabel('Ordered Indices')
-            ax.set_ylabel('Log Var')
-            ax.axis([0,512, lower_lim, upper_lim])
-            ax.set_title('Sample'+ str(ctr))
-            ax.plot(range(512), sort_data)
-            plt_name = Path('log_var_' + str(ctr) + '.png')
-            plt.savefig(self.raw_log_var_graphs_dir / plt_name)
-            plt.close('all')
 
-        def frame_num(in_path):
-            frame_num = int(in_path.name.split('_')[2].split('.')[0])
-            return frame_num
-        
-        plt_files = sorted([x for x in Path(self.raw_log_var_graphs_dir).iterdir() 
-                            if x.name.startswith('log_var_')],
+        def make_graphs(data, y_label, file_prefix, file_dir):
+            lower_lim = np.percentile(data, 5, axis=1).min()
+            upper_lim = np.percentile(data, 95, axis=1).max()
+            for ctr, data in enumerate(tqdm(data, desc="Processing " + y_label)):
+                sort_data = np.sort(data.numpy())
+                fig, ax = plt.subplots()
+                ax.set_xlabel('Ordered Indices')
+                ax.set_ylabel(y_label)
+                ax.axis([0,512, lower_lim, upper_lim])
+                ax.set_title('Sample'+ str(ctr))
+                ax.plot(range(512), sort_data)
+                ax.axhline(y=0, color='lightblue')
+                plt_name = Path(file_prefix + str(ctr) + '.png')
+                plt.savefig(file_dir / plt_name)
+                plt.close('all')
+
+            
+            def frame_num(in_path):
+                frame_num = int(in_path.name.split('_')[-1].split('.')[0])
+                return frame_num
+
+            graph_files = sorted([x for x in Path(file_dir).iterdir() 
+                            if x.name.startswith(file_prefix)],
                             key=frame_num)
+            return graph_files
 
-        writer = imageio.get_writer(self.movies_dir / 'log_var.mp4', fps=20)
-        for file in tqdm(plt_files, desc='Making log_var movie'):
-            im = imageio.imread(file)
-            writer.append_data(im)
-        writer.close()
+
+        log_var_graph_files = make_graphs(log_var, 'Log Var', 
+                                          'log_var_', self.raw_log_var_graphs_dir)
+        mu_graph_files = make_graphs(mu, 'mu', 
+                                     'mu_', self.raw_mu_graphs_dir)
+        
+        def make_movie(file_list, movie_name):
+            writer = imageio.get_writer(self.movies_dir / movie_name, fps=20)
+            for file in tqdm(file_list, desc='Making movie'):
+                im = imageio.imread(file)
+                writer.append_data(im)
+            writer.close()
+
+        make_movie(log_var_graph_files, 'log_var.mp4')
+        make_movie(mu_graph_files, 'mu.mp4')   
+
 
     def compare_recon_kl_losses(self):
 
