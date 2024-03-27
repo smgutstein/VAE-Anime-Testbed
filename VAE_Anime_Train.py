@@ -89,7 +89,15 @@ class VAE_Trainer:
         self.kl_adj_factor = float(config.get('Training_Parameters', 'kl_adj_factor'))  
         self.kl_adj_factor_max = float(config.get('Training_Parameters', 'kl_adj_factor_max'))  
         self.parent_dir = config.get('Output_Parameters', 'parent_dir')
-        self.save_net = bool(config.get('Output_Parameters', 'save_net'))
+        temp = config.get('Output_Parameters', 'save_net').lower() 
+        if temp == 'true' or temp == '1':
+            self.save_net = True            
+        elif temp == 'false' or temp == '0':
+            self.save_net = False   
+        else:
+            print("Invalid value for save_net in config file. Expected True/False, true/false or 1/0")
+            print(f"Found {temp} in config file. Will assume value of true")
+            self.save_net = True
 
 
     def snapshot_vae_behavior (self, epoch=0, step=0, 
@@ -173,8 +181,6 @@ class VAE_Trainer:
         print("Start Time: ", ctime())
 
         # Initialize performance trackers
-        kl_adj_factor = 1e-6 
-        kl_adj_factor_max = 1500
         prev_loss_recon = np.inf
         prev_loss_kl = np.inf
 
@@ -211,16 +217,16 @@ class VAE_Trainer:
 
                         # Scale losses
                         if (curr_loss_recon >= prev_loss_recon) and (curr_loss_kl <= prev_loss_kl):
-                            kl_adj_factor /= 2
+                            self.kl_adj_factor /= 2
                         elif (curr_loss_recon < prev_loss_recon) and (curr_loss_kl > prev_loss_kl):
-                            kl_adj_factor *= 2
-                        kl_adj_factor = min(kl_adj_factor, kl_adj_factor_max)
+                            self.kl_adj_factor *= 2
+                        self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
                         prev_loss_recon = curr_loss_recon
                         prev_loss_kl = curr_loss_kl
 
                         # Calculate Total Effective Loss
-                        loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f} -- {kl_adj_factor:.4f}  \n")
-                        loss_tot = loss_recon + kl_adj_factor*loss_kl
+                        loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f} -- {self.kl_adj_factor:.4f}  \n")
+                        loss_tot = loss_recon + self.kl_adj_factor*loss_kl
                         
  
                     # Get gradient of tital effective loss w/resp to trainable params
