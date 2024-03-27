@@ -47,7 +47,6 @@ class AnalyzeResults():
         
     def get_analysis_dir(self):
         self.load_config_file()
-
         return self.parent_dir / "analysis"
 
     def make_images_movie(self):
@@ -75,20 +74,27 @@ class AnalyzeResults():
         with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
             mu, log_var = pickle.load(f)
 
-        def make_graphs(data, y_label, file_prefix, file_dir):
+        def make_graphs(data, y_label, file_prefix, file_dir, sort_data=True):
             lower_lim = np.percentile(data, 5, axis=1).min()
             upper_lim = np.percentile(data, 95, axis=1).max()
             for ctr, data in enumerate(tqdm(data, desc="Processing " + y_label)):
-                sort_data = np.sort(data.numpy())
+                if sort_data:   
+                    plot_data = np.sort(data.numpy())
+                    final_file_dir = file_dir / Path('sorted')
+                else:
+                    plot_data = data.numpy()
+                    final_file_dir = file_dir / Path('unsorted')
+                final_file_dir.mkdir(parents=True, exist_ok=True)
                 fig, ax = plt.subplots()
                 ax.set_xlabel('Ordered Indices')
                 ax.set_ylabel(y_label)
                 ax.axis([0,512, lower_lim, upper_lim])
                 ax.set_title('Sample'+ str(ctr))
-                ax.plot(range(512), sort_data)
-                ax.axhline(y=0, color='lightblue')
+                #ax.plot(range(512), plot_data, '.', color='blue')
+                ax.scatter(range(512), plot_data, s=3, color='cadetblue')
+                ax.axhline(y=0, color='lightsteelblue')
                 plt_name = Path(file_prefix + str(ctr) + '.png')
-                plt.savefig(file_dir / plt_name)
+                plt.savefig(final_file_dir / plt_name)
                 plt.close('all')
 
             
@@ -96,7 +102,7 @@ class AnalyzeResults():
                 frame_num = int(in_path.name.split('_')[-1].split('.')[0])
                 return frame_num
 
-            graph_files = sorted([x for x in Path(file_dir).iterdir() 
+            graph_files = sorted([x for x in Path(final_file_dir).iterdir() 
                             if x.name.startswith(file_prefix)],
                             key=frame_num)
             return graph_files
@@ -111,8 +117,14 @@ class AnalyzeResults():
 
         # Make log var movie
         log_var_graph_files = make_graphs(log_var, 'Log Var', 
-                                          'log_var_', self.raw_log_var_graphs_dir)
-        make_movie(log_var_graph_files, 'log_var.mp4')
+                                          'log_var_', 
+                                          self.raw_log_var_graphs_dir)
+        make_movie(log_var_graph_files, 'sorted_log_var.mp4')
+
+        # Make movie without sorting values in each frame
+        log_var_graph_files2 = make_graphs(log_var, 'Log Var', 
+                                          'log_var_', self.raw_log_var_graphs_dir, False)
+        make_movie(log_var_graph_files2, 'unsorted_log_var.mp4')
 
         # Make mu movie
         mu_graph_files = make_graphs(mu, 'mu', 
