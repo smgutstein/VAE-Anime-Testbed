@@ -1,6 +1,4 @@
 from contextlib import redirect_stdout
-import numpy as np
-import sys
 import tensorflow as tf
 
 from pathlib import Path
@@ -26,19 +24,25 @@ class VAE_Model():
     def __init__(self, enc_input_shape=(64,64,3,), 
                 latent_dim=512, output_dir="scratch_output"):
         self.enc_input_shape = enc_input_shape
+
+        # Set the latent dimension and output directory
         self.latent_dim = latent_dim
         self.output_dir = Path(output_dir)
+
+        # Initialize the encoder, decoder, and VAE
         self.init_encoder()
         self.init_decoder()
         self.init_VAE()
 
 
     def init_encoder(self):
+        # Create a new VAE_Encoder object and set the encoder model
         self.encoder = VAE_Encoder(self.enc_input_shape, 
                                    self.latent_dim, self.output_dir)
         self.encoder.set_encoder_model()
 
     def init_decoder(self):
+        # Create a new VAE_Decoder object and set the decoder model
         if self.encoder is None or self.encoder.encoder_net is None:
             print("The encoder must be initialized first.")
             return
@@ -47,6 +51,7 @@ class VAE_Model():
         self.decoder.set_decoder_model()
 
     def init_VAE(self):
+        # Initialize the VAE model
         self.init_encoder()
         self.init_decoder()
 
@@ -69,6 +74,7 @@ class VAE_Model():
         self.vae_net.add_loss(loss)
 
     def show_model(self):
+        # Display the model summary
         if self.vae_net:
             with open(self.output_dir / Path('model_summary.txt'), 'w') as f:
                 # Redirect stdout to the file
