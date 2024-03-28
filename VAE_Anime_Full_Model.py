@@ -1,5 +1,9 @@
+from contextlib import redirect_stdout
 import numpy as np
+import sys
 import tensorflow as tf
+
+from pathlib import Path
 
 from VAE_Anime_Encoder import VAE_Encoder
 from VAE_Anime_Decoder import VAE_Decoder
@@ -23,14 +27,15 @@ class VAE_Model():
                 latent_dim=512, output_dir="scratch_output"):
         self.enc_input_shape = enc_input_shape
         self.latent_dim = latent_dim
-        self.output_dir = output_dir
+        self.output_dir = Path(output_dir)
         self.init_encoder()
         self.init_decoder()
         self.init_VAE()
 
 
     def init_encoder(self):
-        self.encoder = VAE_Encoder(self.enc_input_shape, self.latent_dim)
+        self.encoder = VAE_Encoder(self.enc_input_shape, 
+                                   self.latent_dim, self.output_dir)
         self.encoder.set_encoder_model()
 
     def init_decoder(self):
@@ -38,7 +43,7 @@ class VAE_Model():
             print("The encoder must be initialized first.")
             return
         enc_output_shape = self.encoder.encoder_net.get_layer('last_batch_normalization').input_shape
-        self.decoder = VAE_Decoder(enc_output_shape, self.latent_dim)
+        self.decoder = VAE_Decoder(enc_output_shape, self.latent_dim, self.output_dir)
         self.decoder.set_decoder_model()
 
     def init_VAE(self):
@@ -65,9 +70,16 @@ class VAE_Model():
 
     def show_model(self):
         if self.vae_net:
-            self.vae_net.summary()   
+            with open(self.output_dir / Path('model_summary.txt'), 'w') as f:
+                # Redirect stdout to the file
+                with redirect_stdout(f):
+                    # Call model.summary(), which will now print to the file
+                    self.vae_net.summary()
+                    print("Model summary has been saved to 'model_summary.txt'") 
+                self.encoder.show_model()
+                self.decoder.show_model()
         else:
-            print("Model not yet defined")
+            print("Full VAE Model not yet defined")
 
       
 

@@ -1,6 +1,9 @@
 import numpy as np
 import tensorflow as tf
 
+from contextlib import redirect_stdout
+from pathlib import Path
+
 
 class Sampling(tf.keras.layers.Layer):
   def call(self, inputs):
@@ -25,13 +28,15 @@ class Sampling(tf.keras.layers.Layer):
 class VAE_Encoder:
     def __init__(self, 
                  enc_input_shape=(64,64,3), 
-                 latent_dim=512):
+                 latent_dim=512, 
+                 output_dir="scratch_output"):
         self.enc_input_shape = enc_input_shape
         self.base_filters = 32
         self.filter_factors = [1,2,4]
         self.encode_dense_units = 1024
         self.k_size = 3
         self.latent_dim = latent_dim
+        self.output_dir = Path(output_dir)
         self.encoder_net = None
         self.num_input_pixels = np.prod(enc_input_shape)
                 
@@ -111,9 +116,14 @@ class VAE_Encoder:
     
     def show_model(self):
         if self.encoder_net:
-           self.encoder_net.summary()   
+           with open(self.output_dir / Path('encoder_model_summary.txt'), 'w') as f:
+                # Redirect stdout to the file
+                with redirect_stdout(f):
+                    # Call model.summary(), which will now print to the file
+                    self.encoder_net.summary()
+                    print("Model summary has been saved to 'model_summary.txt'")   
         else:
-            print("Model not yet defined")
+            print("Encoder Model not yet defined")
 
 
 if __name__ == '__main__':

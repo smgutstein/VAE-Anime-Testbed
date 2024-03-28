@@ -1,14 +1,19 @@
 import tensorflow as tf
 
+from contextlib import redirect_stdout
+from pathlib import Path    
+
 class VAE_Decoder:
     def __init__(self, 
                  dec_input_shape, 
-                 latent_dim):
+                 latent_dim, 
+                 output_dir="scratch_output"):
         self.dec_input_shape = dec_input_shape
         self.base_filters = 32
         self.filter_factors = [1,2,4]
         self.k_size = 3
         self.latent_dim = latent_dim
+        self.output_dir = Path(output_dir)
         self.decoder_net = None
 
 
@@ -82,11 +87,14 @@ class VAE_Decoder:
 
     def show_model(self):
         if self.decoder_net:
-            self.decoder_net.summary()   
+           with open(self.output_dir / Path('decoder_model_summary.txt'), 'w') as f:
+                # Redirect stdout to the file
+                with redirect_stdout(f):
+                    # Call model.summary(), which will now print to the file
+                    self.decoder_net.summary()
+                    print("Model summary has been saved to 'model_summary.txt'")   
         else:
-            print("Model not yet defined")
-
-
+            print("Decoder Model not yet defined")
 if __name__ == '__main__':
     
     decoder = VAE_Decoder(dec_input_shape=(None, 8, 8, 128), 

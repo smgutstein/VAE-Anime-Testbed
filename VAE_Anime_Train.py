@@ -35,9 +35,6 @@ class VAE_Trainer:
         self.config_file = config_file
         self.load_config_file()
 
-        # Initialize the VAE model
-        self.vae = VAE_Model()
-
         # Set the output directories
         parent_output_dir = Path(self.parent_dir)
         parent_output_dir.mkdir(parents=True, exist_ok=True)
@@ -63,6 +60,11 @@ class VAE_Trainer:
 
         self.movies_dir = self.output_dir / "movies"
         self.movies_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize the VAE model
+        self.model_info_dir = self.output_dir / "model_info"
+        self.model_info_dir.mkdir(parents=True, exist_ok=True)
+        self.vae = VAE_Model(output_dir=self.model_info_dir)
 
         # Initialize the Datasets class
         self.data = Datasets(self.output_dir)
@@ -241,7 +243,7 @@ class VAE_Trainer:
  
                     recon_loss_list.append(loss_recon.numpy())
                     kl_loss_list.append(loss_kl.numpy())
-                    adj_kl_factor_list.append(kl_adj_factor)
+                    adj_kl_factor_list.append(self.kl_adj_factor)
 
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
@@ -280,7 +282,10 @@ class VAE_Trainer:
         delta_time = str(timedelta(seconds = curr_time - start_time))
         print("Running Time", delta_time)
         if self.save_net:
+            print(f"Saving the model to {self.stats_dir / Path('anime.keras')}")
             self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
+        else:
+            print("Model not saved")
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
