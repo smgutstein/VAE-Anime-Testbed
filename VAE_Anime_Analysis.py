@@ -6,10 +6,10 @@ import pickle
 
 from matplotlib.ticker import EngFormatter
 from pathlib import Path
+from time import time, ctime
 from tqdm import tqdm
 from utils import is_config_file
 from utils import read_config_file
-from utils import get_git_hash
 
 class AnalyzeResults():
     def __init__(self, config_file="config.ini"):
@@ -107,7 +107,6 @@ class AnalyzeResults():
                             key=frame_num)
             return graph_files
 
-
         def make_movie(file_list, movie_name):
             writer = imageio.get_writer(self.movies_dir / movie_name, fps=20)
             for file in tqdm(file_list, desc='Making movie for ' + movie_name[:-4]):
@@ -115,7 +114,7 @@ class AnalyzeResults():
                 writer.append_data(im)
             writer.close()
 
-        # Make log var movie
+        # Make log var movie      
         log_var_graph_files = make_graphs(log_var, 'Log Var', 
                                           'log_var_', 
                                           self.raw_log_var_graphs_dir)
