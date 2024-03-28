@@ -203,7 +203,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     ar = AnalyzeResults(args.config_file)
-    ar.make_images_movie()
-    ar.make_mu_log_var_graphs()
     ar.compare_recon_kl_losses()    
     ar.compare_recon_kl_losses2()
+    ar.make_images_movie()
+    ar.make_mu_log_var_graphs()
