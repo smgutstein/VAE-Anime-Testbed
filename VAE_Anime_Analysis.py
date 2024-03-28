@@ -77,12 +77,12 @@ class AnalyzeResults():
         def make_graphs(data, y_label, file_prefix, file_dir, sort_data=True):
             lower_lim = np.percentile(data, 5, axis=1).min()
             upper_lim = np.percentile(data, 95, axis=1).max()
-            for ctr, data in enumerate(tqdm(data, desc="Processing " + y_label)):
+            for ctr, curr_data in enumerate(tqdm(data, desc="Processing " + y_label)):
                 if sort_data:   
-                    plot_data = np.sort(data.numpy())
+                    plot_data = np.sort(curr_data.numpy())
                     final_file_dir = file_dir / Path('sorted')
                 else:
-                    plot_data = data.numpy()
+                    plot_data = curr_data.numpy()
                     final_file_dir = file_dir / Path('unsorted')
                 final_file_dir.mkdir(parents=True, exist_ok=True)
                 fig, ax = plt.subplots()
