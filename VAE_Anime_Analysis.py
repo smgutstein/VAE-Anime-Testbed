@@ -164,7 +164,8 @@ class AnalyzeResults():
         formatter = EngFormatter(places=0, unit='')  # Adjust places and unit as needed
 
 
-        fig, axes = plt.subplots(2,2)  # Create a figure containing a single axes.
+        fig, axes = plt.subplots(2,2)  
+        # Log scale plot of both losses
         axes[0][0].set_xlabel('Iteration',fontsize=8, labelpad=-2)
         axes[0][0].set_ylabel('Loss')
         axes[0][0].set_yscale('log')
@@ -172,17 +173,21 @@ class AnalyzeResults():
         axes[0][0].plot(range(num_pts), kl_loss_list, label="kl loss")
         axes[0][0].set_ylim([.0001,1000])
 
+        # Plot adjusted kl loss
         axes[0][1].set_xlabel('Iteration',fontsize=8, labelpad=-2)
         axes[0][1].set_ylabel('Adj KL Loss')
-        axes[0][1].yaxis.set_major_formatter(formatter)
-        axes[0][1].plot(range(num_pts), adj_kl_factor_list, label="adj kl loss", color='#ff7f0e')
+        #axes[0][1].yaxis.set_major_formatter(formatter)
+        axes[0][1].ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
+        axes[0][1].plot(range(num_pts), adj_kl_factor_list, label="adj kl factor", color='#ff7f0e')
         axes[0][1].yaxis.tick_right()
         axes[0][1].yaxis.set_label_position("right")
 
+        # Plot recon loss
         axes[1][0].set_xlabel('Iteration')
         axes[1][0].set_ylabel('Recon Loss')
         axes[1][0].plot(range(num_pts), recon_loss_list, label="recon loss")
 
+        # Plot kl loss  
         axes[1][1].set_xlabel('Iteration')
         axes[1][1].set_ylabel('KL Loss')
         axes[1][1].yaxis.tick_right()
@@ -194,12 +199,16 @@ class AnalyzeResults():
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
-    parser.add_argument('config_file', type=str, nargs='?',
+    parser.add_argument('-c', '--config_file', type=str,
                         default='config.ini', help='Config file')
+    parser.add_argument('-s', '--stat_graphs', action='store_true',
+                        help='Get mu & sigma graphs and movie')
     args = parser.parse_args()
     
     ar = AnalyzeResults(args.config_file)
     ar.compare_recon_kl_losses()    
     ar.compare_recon_kl_losses2()
     ar.make_images_movie()
-    ar.make_mu_log_var_graphs()
+    if args.stat_graphs:
+        ar.make_mu_log_var_graphs()
+    
