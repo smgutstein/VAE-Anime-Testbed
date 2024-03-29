@@ -289,17 +289,15 @@ class VAE_Trainer:
             print("Model not saved")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python VAE_Anime_Train.py <config_file>") 
-        sys.exit(1)
-    if not is_config_file(sys.argv[1]): 
-        print("Invalid config file")
-        sys.exit(1) 
 
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
-    parser.add_argument('config_file', type=str, 
+    parser.add_argument('-c', '--config_file', type=str, nargs='?',
                         default='config.ini', help='Config file')
+
     args = parser.parse_args()
+    if not is_config_file(args.config_file): 
+        print("Invalid config file")
+        sys.exit(1) 
 
     vae = VAE_Trainer(args.config_file)
     vae.vae.show_model()
