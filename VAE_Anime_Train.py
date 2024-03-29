@@ -196,7 +196,7 @@ class VAE_Trainer:
         log_var_list2=[]
 
         with open(self.stats_dir / Path("losses_file.txt"), 'w') as loss_file:
-            loss_file.write("Epoch -- Step -- Recon Loss -- KL Loss -- KL_Adj_Factor\n")
+            loss_file.write(f"Epoch -- Step -- Recon Loss -- KL Loss     -- KL_Adj_Factor\n")
             for epoch in range(self.epochs):
                 print('Start of epoch %d at %s' % (epoch, ctime()))
     
@@ -220,14 +220,14 @@ class VAE_Trainer:
                         # Scale losses
                         if (curr_loss_recon >= prev_loss_recon) and (curr_loss_kl <= prev_loss_kl):
                             self.kl_adj_factor /= 2
-                        elif (curr_loss_recon < prev_loss_recon) and (curr_loss_kl > prev_loss_kl):
+                        elif (curr_loss_recon < prev_loss_recon):
                             self.kl_adj_factor *= 2
                         self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
                         prev_loss_recon = curr_loss_recon
                         prev_loss_kl = curr_loss_kl
 
                         # Calculate Total Effective Loss
-                        loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4f} -- {self.kl_adj_factor:.4f}  \n")
+                        loss_file.write(f"{epoch}     --  {step}   --  {loss_recon:.4f} -- {loss_kl:.4e}  -- {self.kl_adj_factor:.4e}  \n")
                         loss_tot = loss_recon + self.kl_adj_factor*loss_kl
                         
  
@@ -271,13 +271,13 @@ class VAE_Trainer:
 
 
                     curr_time = time()
-                    step_delta_time = str(timedelta(seconds = curr_time - last_time))
+                    #step_delta_time = str(timedelta(seconds = curr_time - last_time))
                     tot_delta_time = str(timedelta(seconds = curr_time - start_time))
                     last_time = curr_time
 
-                    print('Epoch: %s step: %s mean loss = %s, step run time = %s, tot run time = %s' %
-                        (epoch, step, loss_recon.numpy(), 
-                            step_delta_time, tot_delta_time))
+                    print('Epoch: %s step: %s mean loss = %s, kl_loss = %s, kl_adj_factor = %s, tot run time = %s' %
+                        (epoch, step, loss_recon.numpy(), loss_kl.numpy(),
+                            self.kl_adj_factor, tot_delta_time))
         print("End Time", ctime())
         delta_time = str(timedelta(seconds = curr_time - start_time))
         print("Running Time", delta_time)
