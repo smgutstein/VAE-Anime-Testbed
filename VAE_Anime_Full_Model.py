@@ -58,19 +58,19 @@ class VAE_Model():
         
         inputs = tf.keras.layers.Input(shape=self.enc_input_shape)
 
-        # get mu, sigma, and z from the encoder output
-        mu, sigma, z = self.encoder.encoder_net(inputs)
+        # get mu, log_var, and z from the encoder output
+        mu, log_var, z = self.encoder.encoder_net(inputs)
     
         # get reconstructed output from the decoder
         reconstruction = self.decoder.decoder_net(z)
 
         # define the inputs and outputs of the VAE
         self.vae_net = tf.keras.Model(inputs=inputs, 
-                                      outputs=[reconstruction, mu, sigma],
+                                      outputs=[reconstruction, mu, log_var],
                                       name="Full_VAE_Network")
     
         # add the KL loss
-        loss = kl_reconstruction_loss(inputs, z, mu, sigma)
+        loss = kl_reconstruction_loss(inputs, z, mu, log_var)
         self.vae_net.add_loss(loss)
 
     def show_model(self):
