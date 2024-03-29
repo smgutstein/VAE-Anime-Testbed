@@ -6,7 +6,7 @@ from pathlib import Path
 from VAE_Anime_Encoder import VAE_Encoder
 from VAE_Anime_Decoder import VAE_Decoder
 
-def kl_reconstruction_loss(inputs, outputs, mu, log_sigma):
+def kl_reconstruction_loss(mu, log_sigma):
     """ Computes the Kullback-Leibler Divergence (KLD)
     Args:
         inputs -- batch from the dataset
@@ -70,7 +70,7 @@ class VAE_Model():
                                       name="Full_VAE_Network")
     
         # add the KL loss
-        loss = kl_reconstruction_loss(inputs, z, mu, log_var)
+        loss = kl_reconstruction_loss(mu, log_var)
         self.vae_net.add_loss(loss)
 
     def show_model(self):
