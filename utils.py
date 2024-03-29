@@ -25,9 +25,10 @@ def is_config_file(filename):
         return False
     
 def get_git_hash():
+    branch_str = sp.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
     hash_str =  sp.check_output(['git', 'log', '-n', '1']).decode("utf-8").strip()
     diff_str = sp.check_output(['git', 'diff']).decode("utf-8").strip()
-    output_str = hash_str + '\n\n' + diff_str
+    output_str = "Current Branch: " + branch_str + '\n\n' + hash_str + '\n\n' + diff_str
     return output_str
 
 def timing_decorator(func):
