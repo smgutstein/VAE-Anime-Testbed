@@ -15,6 +15,7 @@ from time import time, ctime
 
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_Full_Model import VAE_Model
+from VAE_Anime_Analysis import AnalyzeResults
 from utils import is_config_file
 from utils import read_config_file
 from utils import get_git_hash
@@ -306,3 +307,9 @@ if __name__ == "__main__":
     vae.data.display_sample_data('v', 18)
     vae.snapshot_vae_behavior()
     vae.train_loop()
+
+    print("Starting to analyze results....")
+    ar = AnalyzeResults(args.config_file)
+    ar.compare_recon_kl_losses()    
+    ar.compare_recon_kl_losses2()
+    ar.make_images_movie()
