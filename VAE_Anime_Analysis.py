@@ -64,11 +64,8 @@ class AnalyzeResults():
                   if str(file.name)[:14] == "image_at_epoch"]
         frames.sort(key=frame_num)
 
-        writer = imageio.get_writer(self.movies_dir / 'vae_movie.mp4', fps=10)
-        for curr_frame in tqdm(frames, desc='Processing Anime Frames'):
-            im = imageio.imread(Path(curr_frame))
-            writer.append_data(im)
-        writer.close()
+        # Make movie
+        self.make_movie(frames, 'vae_movie.mp4', 10)
 
     def make_mu_log_var_graphs(self):
         with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
@@ -107,30 +104,29 @@ class AnalyzeResults():
                             key=frame_num)
             return graph_files
 
-        def make_movie(file_list, movie_name):
-            writer = imageio.get_writer(self.movies_dir / movie_name, fps=20)
-            for file in tqdm(file_list, desc='Making movie for ' + movie_name[:-4]):
-                im = imageio.imread(file)
-                writer.append_data(im)
-            writer.close()
-
         # Make log var movie      
         log_var_graph_files = make_graphs(log_var, 'Log Var', 
                                           'log_var_', 
                                           self.raw_log_var_graphs_dir)
-        make_movie(log_var_graph_files, 'sorted_log_var.mp4')
+        self.make_movie(log_var_graph_files, 'sorted_log_var.mp4', 20)
 
         # Make movie without sorting values in each frame
         log_var_graph_files2 = make_graphs(log_var, 'Log Var', 
                                           'log_var_', self.raw_log_var_graphs_dir, False)
-        make_movie(log_var_graph_files2, 'unsorted_log_var.mp4')
+        self.make_movie(log_var_graph_files2, 'unsorted_log_var.mp4', 20)
 
         # Make mu movie
         mu_graph_files = make_graphs(mu, 'mu', 
                                      'mu_', self.raw_mu_graphs_dir)
-        make_movie(mu_graph_files, 'mu.mp4')   
+        self.make_movie(mu_graph_files, 'mu.mp4', 20)   
 
-
+    def make_movie(self, file_list, movie_name, fps):
+        writer = imageio.get_writer(self.movies_dir / movie_name, fps=fps)
+        for file in tqdm(file_list, desc='Making movie for ' + movie_name[:-4]):
+            im = imageio.imread(file)
+            writer.append_data(im)
+        writer.close()
+        
     def compare_recon_kl_losses(self):
 
         with open(self.stats_dir / Path('loss_lists.pkl'), 'rb') as f:
