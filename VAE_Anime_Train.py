@@ -220,8 +220,10 @@ class VAE_Trainer:
 
                         # Scale losses
                         if (curr_loss_recon >= prev_loss_recon) and (curr_loss_kl <= prev_loss_kl):
+                            # Emphasize KL Loss whenever possible
                             self.kl_adj_factor /= 2
                         elif (curr_loss_recon < prev_loss_recon):
+                            # Main Priority Reconstruction Loss
                             self.kl_adj_factor *= 2
                         self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
                         prev_loss_recon = curr_loss_recon
