@@ -6,19 +6,17 @@ from pathlib import Path
 from VAE_Anime_Encoder import VAE_Encoder
 from VAE_Anime_Decoder import VAE_Decoder
 
-def kl_reconstruction_loss(mu, log_sigma):
-    """ Computes the Kullback-Leibler Divergence (KLD)
-    Args:
-        inputs -- batch from the dataset
-        outputs -- output of the Sampling layer
-        mu -- mean
-        log_sigma -- log of standard deviation
+class KLDivergenceLossLayer(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(KLDivergenceLossLayer, self).__init__(**kwargs)
 
-    Returns:
-        KLD loss
-    """
-    kl_loss = 1 + log_sigma - tf.square(mu) - tf.math.exp(log_sigma)
-    return tf.reduce_mean(kl_loss) * -0.5
+    def call(self, inputs):
+        mu, log_var = inputs
+        kl_loss = 1 + log_var - tf.square(mu) - tf.exp(log_var)
+        kl_loss = tf.reduce_mean(kl_loss) * -0.5
+        self.add_loss(kl_loss)
+        return kl_loss
+
 
 class VAE_Model():
     def __init__(self, enc_input_shape=(64,64,3,), 
@@ -28,6 +26,7 @@ class VAE_Model():
         # Set the latent dimension and output directory
         self.latent_dim = latent_dim
         self.output_dir = Path(output_dir)
+        self.kl_loss_layer = KLDivergenceLossLayer()
 
         # Initialize the encoder, decoder, and VAE
         self.init_encoder()
@@ -68,10 +67,13 @@ class VAE_Model():
         self.vae_net = tf.keras.Model(inputs=inputs, 
                                       outputs=[reconstruction, mu, log_var],
                                       name="Full_VAE_Network")
-    
-        # add the KL loss
-        loss = kl_reconstruction_loss(mu, log_var)
-        self.vae_net.add_loss(loss)
+
+        # Compute the KL divergence loss using the loss layer
+        kl_loss = self.kl_loss_layer([mu, log_var])
+
+        # Add the KL loss to the model's losses
+        self.vae_net.add_loss(kl_loss)
+
 
     def show_model(self):
         # Display the model summary
