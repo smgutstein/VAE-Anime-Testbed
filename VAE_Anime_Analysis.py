@@ -72,8 +72,9 @@ class AnalyzeResults():
             mu, log_var = pickle.load(f)
 
         def make_graphs(data, y_label, file_prefix, file_dir, sort_data=True):
-            lower_lim = np.percentile(data, 5, axis=1).min()
-            upper_lim = np.percentile(data, 95, axis=1).max()
+            lower_lim = np.percentile(np.percentile(data, 5, axis=1), 10)
+            upper_lim = np.percentile(np.percentile(data, 95, axis=1), 90)
+
             for ctr, curr_data in enumerate(tqdm(data, desc="Processing " + y_label)):
                 if sort_data:   
                     plot_data = np.sort(curr_data.numpy())
