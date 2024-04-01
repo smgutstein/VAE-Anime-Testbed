@@ -109,7 +109,7 @@ class VAE_Trainer:
         elif temp == 'false' or temp == '0':
             self.save_net = False   
         else:
-            print("Invalid value for save_net in config file. Expected True/False, true/false or 1/0")
+            print("Invalid save_net value in config file. Expected True/False, true/false or 1/0")
             print(f"Found {temp} in config file. Will assume value of true")
             self.save_net = True
 
@@ -219,7 +219,8 @@ class VAE_Trainer:
                         reconstructed, mu, log_var = self.vae.vae_net(x_batch_train)
 
                         # compute reconstruction loss
-                        loss_recon = self.mse_loss(x_batch_train, reconstructed) * self.vae.encoder.num_input_pixels # 64 * 64 * 3
+                        loss_recon = self.mse_loss(x_batch_train, reconstructed) * \
+                                     self.vae.encoder.num_input_pixels # 64 * 64 * 3
 
                         # get KLD regularization loss 
                         loss_kl = self.vae.vae_net.losses[0]
@@ -229,7 +230,7 @@ class VAE_Trainer:
                         curr_loss_kl = loss_kl.numpy()
 
                         # Scale losses
-                        if (curr_loss_recon >= prev_loss_recon):# and (curr_loss_kl <= prev_loss_kl):
+                        if (curr_loss_recon >= prev_loss_recon):#and(curr_loss_kl<=prev_loss_kl):
                             # Emphasize KL Loss whenever possible
                             self.kl_adj_factor = self.dec(self.kl_adj_factor) #/= 2
                         elif (curr_loss_recon < prev_loss_recon):
@@ -237,10 +238,11 @@ class VAE_Trainer:
                             self.kl_adj_factor = self.inc(self.kl_adj_factor) #*= 2
                         self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
 
-                        # Adjust Max KL Loss Factor - if consistent bouncing between max & 0.5max values
+                        # Adjust Max KL Loss Factor - if just bouncing tween max & 0.5max values
                         self.kl_adj_factor_queue.append(self.kl_adj_factor)
                         if len(self.kl_adj_factor_queue) >= 2:
-                            delta = sign(self.kl_adj_factor_queue[-1] - self.kl_adj_factor_queue[-2])
+                            delta = sign(self.kl_adj_factor_queue[-1] -
+                                         self.kl_adj_factor_queue[-2])
                             self.kl_adj_factor_delta_queue.append(delta)
                         test1 = max(self.kl_adj_factor_queue) == self.kl_adj_factor_max
                         test2 = min(self.kl_adj_factor_queue) == self.kl_adj_factor_max/2
@@ -260,14 +262,17 @@ class VAE_Trainer:
                         # Calculate Total Effective Loss
                         tempx1 = max(self.kl_adj_factor_queue)
                         tempn1 = min(self.kl_adj_factor_queue)
-                        loss_file.write(f"{epoch}     --  {step}   --  {loss_recon:.4f} -- {loss_kl:.4e}  -- {self.kl_adj_factor:.4e}  ")
-                        loss_file.write(f"{test1} {test2} {test3} {num_ups} {num_downs} {tempx1} {tempn1} {len(self.kl_adj_factor_queue)}  \n")
+                        loss_file.write(f"{epoch}     --  {step}   --  {loss_recon:.4f}")
+                        loss_file.write(f"-- {loss_kl:.4e}  -- {self.kl_adj_factor:.4e}  ")
+                        loss_file.write(f"{test1} {test2} {test3} {num_ups} {num_downs} ")
+                        loss_file.write(f"{tempx1} {tempn1} {len(self.kl_adj_factor_queue)}  \n")
                         loss_tot = loss_recon + self.kl_adj_factor*loss_kl
                         
  
                     # Get gradient of tital effective loss w/resp to trainable params
                     grads = tape.gradient(loss_tot, self.vae.vae_net.trainable_weights)
-                    self.optimizer.apply_gradients(zip(grads, self.vae.vae_net.trainable_weights))
+                    self.optimizer.apply_gradients(zip(grads,
+                                                       self.vae.vae_net.trainable_weights))
 
                     if step % 10 == 0:
                         display.clear_output(wait=False)    
