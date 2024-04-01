@@ -8,6 +8,7 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 from collections import defaultdict
+from collections import deque
 from datetime import timedelta
 from IPython import display
 from pathlib import Path
@@ -16,10 +17,12 @@ from time import time, ctime
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_Full_Model import VAE_Model
 from VAE_Anime_Analysis import AnalyzeResults
+from utils import delta_generator
+from utils import delt_add, delt_sub, delt_mul, delt_div   
+from utils import get_git_hash
 from utils import is_config_file
 from utils import read_config_file
-from utils import get_git_hash
-
+from utils import sign
 
 class VAE_Trainer:
 
@@ -83,6 +86,13 @@ class VAE_Trainer:
 
         # Training parameters
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        self.kl_adj_factor_queue = deque(maxlen=self.running_window)
+        self.kl_adj_factor_delta_queue = deque(maxlen=self.running_window)
+
+        # Initialize Delta Generator
+        self.delta_gen = delta_generator(delt_mul, delt_div, 2.0)
+        self.inc = self.delta_gen.inc_func
+        self.dec = self.delta_gen.dec_func
 
     def load_config_file(self):
         config = read_config_file(self.config_file)
@@ -91,6 +101,7 @@ class VAE_Trainer:
         self.learning_rate = float(config.get('Training_Parameters', 'learning_rate'))   
         self.kl_adj_factor = float(config.get('Training_Parameters', 'kl_adj_factor'))  
         self.kl_adj_factor_max = float(config.get('Training_Parameters', 'kl_adj_factor_max'))  
+        self.running_window = int(config.get('Training_Parameters', 'running_window'))
         self.parent_dir = config.get('Output_Parameters', 'parent_dir')
         temp = config.get('Output_Parameters', 'save_net').lower() 
         if temp == 'true' or temp == '1':
@@ -180,7 +191,6 @@ class VAE_Trainer:
 
         # Set Timing Parameters
         start_time = time()
-        last_time = start_time
         print("Start Time: ", ctime())
 
         # Initialize performance trackers
@@ -219,18 +229,39 @@ class VAE_Trainer:
                         curr_loss_kl = loss_kl.numpy()
 
                         # Scale losses
-                        if (curr_loss_recon >= prev_loss_recon) and (curr_loss_kl <= prev_loss_kl):
+                        if (curr_loss_recon >= prev_loss_recon):# and (curr_loss_kl <= prev_loss_kl):
                             # Emphasize KL Loss whenever possible
-                            self.kl_adj_factor /= 2
+                            self.kl_adj_factor = self.dec(self.kl_adj_factor) #/= 2
                         elif (curr_loss_recon < prev_loss_recon):
-                            # Main Priority Reconstruction Loss
-                            self.kl_adj_factor *= 2
+                            # If recon loss improves, increase emphasis on KL Loss
+                            self.kl_adj_factor = self.inc(self.kl_adj_factor) #*= 2
                         self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
+
+                        # Adjust Max KL Loss Factor - if consistent bouncing between max & 0.5max values
+                        self.kl_adj_factor_queue.append(self.kl_adj_factor)
+                        if len(self.kl_adj_factor_queue) >= 2:
+                            delta = sign(self.kl_adj_factor_queue[-1] - self.kl_adj_factor_queue[-2])
+                            self.kl_adj_factor_delta_queue.append(delta)
+                        test1 = max(self.kl_adj_factor_queue) == self.kl_adj_factor_max
+                        test2 = min(self.kl_adj_factor_queue) == self.kl_adj_factor_max/2
+                        num_ups = sum([1 for x in self.kl_adj_factor_delta_queue if x > 0]) 
+                        num_downs = sum([1 for x in self.kl_adj_factor_delta_queue if x < 0])  
+                        test3 = (num_ups + num_downs) >= running_window-1
+                        if test1 and test2 and test3:
+                            self.kl_adj_factor_max *= 0.9
+                            self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max) 
+                            self.kl_adj_factor_queue.clear()
+                            self.kl_adj_factor_queue.append(self.kl_adj_factor)
+                            print(f"Lowering kl_adj_max to {self.kl_adj_factor_max}")
+
                         prev_loss_recon = curr_loss_recon
                         prev_loss_kl = curr_loss_kl
 
                         # Calculate Total Effective Loss
-                        loss_file.write(f"{epoch}     --  {step}   --  {loss_recon:.4f} -- {loss_kl:.4e}  -- {self.kl_adj_factor:.4e}  \n")
+                        tempx1 = max(self.kl_adj_factor_queue)
+                        tempn1 = min(self.kl_adj_factor_queue)
+                        loss_file.write(f"{epoch}     --  {step}   --  {loss_recon:.4f} -- {loss_kl:.4e}  -- {self.kl_adj_factor:.4e}  ")
+                        loss_file.write(f"{test1} {test2} {test3} {num_ups} {num_downs} {tempx1} {tempn1} {len(self.kl_adj_factor_queue)}  \n")
                         loss_tot = loss_recon + self.kl_adj_factor*loss_kl
                         
  
