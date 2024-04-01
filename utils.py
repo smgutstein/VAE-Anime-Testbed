@@ -57,3 +57,33 @@ def profile_decorator(func):
         return result
 
     return wrapper
+
+def sign(x):
+    if x > 0:
+        return 1
+    elif x < 0:
+        return -1
+    else:
+        return 0
+    
+def delt_add(x, y):
+    return x + y    
+def delt_sub(x,y):
+    return x - y    
+def delt_mul(x,y):       
+    return x * y
+def delt_div(x,y):
+    return x / y
+    
+class delta_generator():
+    def __init__(self, delta_inc_func, delta_dec_func, delta):
+
+        self.delta = delta
+        self.inc_func = self.customize_function(delta_inc_func, delta)
+        self.dec_func = self.customize_function(delta_dec_func, delta)
+
+    def customize_function(self, base_function, y):
+        def custom_function(x):
+            return base_function(x, y)
+        return custom_function
+    
