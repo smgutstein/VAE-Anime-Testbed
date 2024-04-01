@@ -220,7 +220,7 @@ class VAE_Trainer:
 
                         # compute reconstruction loss
                         loss_recon = self.mse_loss(x_batch_train, reconstructed) * \
-                                     self.vae.encoder.num_input_pixels # 64 * 64 * 3
+                                     self.vae.encoder.num_input_pixels 
 
                         # get KLD regularization loss 
                         loss_kl = self.vae.vae_net.losses[0]
@@ -230,7 +230,7 @@ class VAE_Trainer:
                         curr_loss_kl = loss_kl.numpy()
 
                         # Scale losses
-                        if (curr_loss_recon >= prev_loss_recon):#and(curr_loss_kl<=prev_loss_kl):
+                        if (curr_loss_recon >= prev_loss_recon):
                             # Emphasize KL Loss whenever possible
                             self.kl_adj_factor = self.dec(self.kl_adj_factor) #/= 2
                         elif (curr_loss_recon < prev_loss_recon):
