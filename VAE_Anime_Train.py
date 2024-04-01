@@ -109,7 +109,7 @@ class VAE_Trainer:
         elif temp == 'false' or temp == '0':
             self.save_net = False   
         else:
-            print("Invalid save_net value in config file. Expected True/False, true/false or 1/0")
+            print("Invalid save_net value in config file. Expect True/False, true/false or 1/0")
             print(f"Found {temp} in config file. Will assume value of true")
             self.save_net = True
 
@@ -314,9 +314,13 @@ class VAE_Trainer:
                     tot_delta_time = str(timedelta(seconds = curr_time - start_time))
                     last_time = curr_time
 
-                    print('Epoch: %s step: %s mean loss = %s, kl_loss = %s, kl_adj_factor = %s, tot run time = %s' %
-                        (epoch, step, loss_recon.numpy(), loss_kl.numpy(),
-                            self.kl_adj_factor, tot_delta_time))
+                    out_str = f"Epoch: {epoch} step: {step} "
+                    out_str += f"recon loss = {loss_recon.numpy():.4f} "
+                    out_str += f"kl_loss = {loss_kl.numpy():.4e} "
+                    out_str += f"kl_adj_factor = {self.kl_adj_factor:.4e} "
+                    out_str += f"tot run time = {str(tot_delta_time)}"
+                    print(out_str)
+                    
         print("End Time", ctime())
         delta_time = str(timedelta(seconds = curr_time - start_time))
         print("Running Time", delta_time)
