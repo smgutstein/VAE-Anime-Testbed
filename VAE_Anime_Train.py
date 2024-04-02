@@ -90,7 +90,7 @@ class VAE_Trainer:
         self.kl_adj_factor_delta_queue = deque(maxlen=self.running_window)
 
         # Initialize Delta Generator
-        self.delta_gen = delta_generator(delt_mul, delt_div, 2.0)
+        self.delta_gen = delta_generator(delt_mul, delt_div, self.kl_adj_update_factor)
         self.inc = self.delta_gen.inc_func
         self.dec = self.delta_gen.dec_func
 
@@ -101,6 +101,8 @@ class VAE_Trainer:
         self.learning_rate = float(config.get('Training_Parameters', 'learning_rate'))   
         self.kl_adj_factor = float(config.get('Training_Parameters', 'kl_adj_factor'))  
         self.kl_adj_factor_max = float(config.get('Training_Parameters', 'kl_adj_factor_max'))  
+        self.kl_adj_update_factor = float(config.get('Training_Parameters', 
+                                                     'kl_adj_update_factor'))
         self.running_window = int(config.get('Training_Parameters', 'running_window'))
         self.parent_dir = config.get('Output_Parameters', 'parent_dir')
         temp = config.get('Output_Parameters', 'save_net').lower() 
