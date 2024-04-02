@@ -79,8 +79,8 @@ class delta_generator():
     def __init__(self, delta_inc_func, delta_dec_func, delta):
 
         self.delta = delta
-        self.inc_func = self.customize_function(delta_inc_func, delta)
-        self.dec_func = self.customize_function(delta_dec_func, delta)
+        self.inc_func = self.customize_function(delta_inc_func, 1 + delta)
+        self.dec_func = self.customize_function(delta_dec_func, 1 + delta)
 
     def customize_function(self, base_function, y):
         def custom_function(x):
