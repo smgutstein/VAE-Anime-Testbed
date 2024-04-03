@@ -31,7 +31,7 @@ class Datasets():
     def download_data(self):
         # make the data directory
         Path('/tmp/anime').mkdir(exist_ok=True)
-        if not Path('/tmp/anime/images/').exists:
+        if len(list(Path('/tmp/anime').glob('*'))) < 10:
             # download the zipped dataset to the data directory
             data_url = "https://storage.googleapis.com/learning-datasets/Resources/anime-faces.zip"
             data_file_name = "animefaces.zip"
