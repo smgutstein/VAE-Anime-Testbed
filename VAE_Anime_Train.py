@@ -352,6 +352,5 @@ if __name__ == "__main__":
 
     print("Starting to analyze results....")
     ar = AnalyzeResults(args.config_file)
-    ar.compare_recon_kl_losses()    
-    ar.compare_recon_kl_losses2()
+    ar.make_singleton_graphs()
     ar.make_images_movie()

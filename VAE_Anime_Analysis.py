@@ -197,6 +197,47 @@ class AnalyzeResults():
 
         plt.savefig(self.stats_dir / Path('Recon_KL_Comp_2.png'))
 
+    def make_paretoish_graph(self):
+
+        # Read file with recon and kl losses
+        with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
+            fl = f.readlines()
+
+        recon_pts=[]
+        kl_pts = []
+        for curr_line in fl[1:]:
+            data = [x.strip() for x in curr_line.split('--')]
+            recon_pts.append(float(data[2]))
+            kl_pts.append(float(data[3]))
+
+        fig, ax = plt.subplots()
+
+        skip_pts = int(.10*len(recon_pts))
+        
+        # create a color map
+        colors = np.arange(len(recon_pts[skip_pts:]))
+
+        # create a scatter plot on the axes with colors indicating the order
+        sc = ax.scatter(recon_pts[skip_pts:], kl_pts[skip_pts:], s=1, c=colors, cmap='viridis')
+
+        # Give the plot a title and labels
+        ax.set_xlabel('Recon Loss')
+        ax.set_ylabel('KL Loss')
+        ax.set_title('Pareto-ish Graph')
+
+        # add a colorbar
+        color_bar = fig.colorbar(sc)
+        color_bar.set_label("Pt Number")
+
+        # Save graph
+        plt.savefig(self.stats_dir / Path('Paretoish.png'))     
+
+    def make_singleton_graphs(self):
+        self.make_paretoish_graph()
+        self.compare_recon_kl_losses()  
+        self.compare_recon_kl_losses2()
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
@@ -209,6 +250,7 @@ if __name__ == "__main__":
     ar = AnalyzeResults(args.config_file)
     ar.compare_recon_kl_losses()    
     ar.compare_recon_kl_losses2()
+    ar.make_paretoish_graph()
     ar.make_images_movie()
     if args.stat_graphs:
         ar.make_mu_log_var_graphs()
