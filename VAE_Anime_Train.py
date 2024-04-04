@@ -354,3 +354,4 @@ if __name__ == "__main__":
     ar = AnalyzeResults(args.config_file)
     ar.make_singleton_graphs()
     ar.make_images_movie()
+    ar.make_paretoish_movie()

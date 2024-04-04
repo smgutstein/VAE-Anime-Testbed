@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.ticker import EngFormatter
 from pathlib import Path
+from PIL import Image
 from time import time, ctime
 from tqdm import tqdm
 from utils import is_config_file
@@ -236,6 +238,70 @@ class AnalyzeResults():
         self.make_paretoish_graph()
         self.compare_recon_kl_losses()  
         self.compare_recon_kl_losses2()
+
+    def make_paretoish_movie(self):
+
+        # Read file with recon and kl losses
+        with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
+            fl = f.readlines()
+            
+        recon_pts = []
+        kl_pts = []
+        for curr_line in fl[1:]:  # Skipping the header
+            data = [x.strip() for x in curr_line.split('--')]
+            recon_pts.append(float(data[2]))
+            kl_pts.append(float(data[3]))
+            
+        # Create a writer object
+        writer = imageio.get_writer(self.movies_dir / "paretoish.mp4", fps=5)
+        
+        num_points = len(fl[1:])
+        min_x, max_x = np.percentile(np.array(recon_pts),[0,95])
+        min_y, max_y = np.percentile(np.array(kl_pts),[0,95])
+        frame_len = int(0.05 * num_points)
+        frame_delta = int(0.1 * frame_len)
+        num_frames = int((num_points - frame_len)/frame_delta) + 1
+
+        for idx in tqdm(range(num_frames+1), desc='Making movie for paretoish'):
+
+            # Find start & stop data points for this frame
+            start = idx * frame_delta
+            stop = min(idx * frame_delta + frame_len, num_points)
+
+            # Slice out the data points for this frame
+            r_pts = recon_pts[start:stop]
+            k_pts = kl_pts[start:stop]
+            
+            # Create a figure
+            fig, ax = plt.subplots()
+
+            # create a color map
+            colors = np.arange(len(r_pts))
+
+            # create a scatter plot on the axes with colors indicating the order
+            sc = ax.scatter(r_pts, k_pts, s=1, c=colors, cmap='viridis')
+            ax.set_xlabel('Recon Loss')
+            ax.set_ylabel('KL Loss')
+            ax.set_xlim([min_x, max_x])
+            ax.set_ylim([min_y, max_y])
+            # add a colorbar
+            color_bar = fig.colorbar(sc)
+            color_bar.set_label("Pt Number")
+
+            # Convert the figure to an image
+            canvas = FigureCanvas(fig)
+            canvas.draw()
+            buf = canvas.buffer_rgba()
+            image = Image.frombytes('RGBA', canvas.get_width_height(), bytes(buf), 'raw', 'RGBA', 0, 1)
+
+            # Write the image to the movie file
+            writer.append_data(np.array(image))
+
+            # Close the figure
+            plt.close(fig)
+            
+        # Close the writer
+        writer.close()   
 
 
 if __name__ == "__main__":
