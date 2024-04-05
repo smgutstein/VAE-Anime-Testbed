@@ -139,20 +139,27 @@ class AnalyzeResults():
         axes[0].set_xlabel('Iteration')
         axes[0].set_ylabel('Loss')
         axes[0].set_yscale('log')
-        axes[0].plot(range(len(recon_loss_list)), recon_loss_list, label="recon\n loss")
-        axes[0].plot(range(len(recon_loss_list)), kl_loss_list, label="kl\n loss")
+        axes[0].plot(range(len(recon_loss_list)), recon_loss_list,
+                     label="recon\n loss")
+        axes[0].plot(range(len(recon_loss_list)), kl_loss_list,
+                     label="kl\n loss")
         axes[0].set_ylim([.1,1000])
-        axes[0].legend(loc='center left', bbox_to_anchor=(1, 0.5), prop={'size': 6})
+        axes[0].legend(loc='center left', bbox_to_anchor=(1, 0.5),
+                       prop={'size': 6})
 
         axes[1].set_xlabel('Iteration')
         axes[1].set_ylabel('Recon Loss')
-        axes[1].plot(range(len(recon_loss_list)), recon_loss_list, label="recon\n loss")
-        axes[1].legend(loc='center left', bbox_to_anchor=(1, 0.5), prop={'size': 6})
+        axes[1].plot(range(len(recon_loss_list)), recon_loss_list,
+                     label="recon\n loss")
+        axes[1].legend(loc='center left', bbox_to_anchor=(1, 0.5),
+                       prop={'size': 6})
 
         axes[2].set_xlabel('Iteration')
         axes[2].set_ylabel('KL Loss')
-        axes[2].plot(range(len(recon_loss_list)), kl_loss_list, label="kl\n loss", color='#ff7f0e')
-        axes[2].legend(loc='center left', bbox_to_anchor=(1, 0.5), prop={'size': 6})
+        axes[2].plot(range(len(recon_loss_list)), kl_loss_list,
+                     label="kl\n loss", color='#ff7f0e')
+        axes[2].legend(loc='center left', bbox_to_anchor=(1, 0.5),
+                       prop={'size': 6})
 
         plt.savefig(self.stats_dir / Path('Recon_KL_Comp_1.png'))
 
@@ -181,7 +188,8 @@ class AnalyzeResults():
         axes[0][1].set_ylabel('Adj KL Loss')
         #axes[0][1].yaxis.set_major_formatter(formatter)
         axes[0][1].ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
-        axes[0][1].plot(range(num_pts), adj_kl_factor_list, label="adj kl factor", color='#ff7f0e')
+        axes[0][1].plot(range(num_pts), adj_kl_factor_list,
+                        label="adj kl factor", color='#ff7f0e')
         axes[0][1].yaxis.tick_right()
         axes[0][1].yaxis.set_label_position("right")
 
@@ -195,9 +203,12 @@ class AnalyzeResults():
         axes[1][1].set_ylabel('KL Loss')
         axes[1][1].yaxis.tick_right()
         axes[1][1].yaxis.set_label_position("right")
-        axes[1][1].plot(range(num_pts), kl_loss_list, label="kl loss", color='#ff7f0e')
+        axes[1][1].plot(range(num_pts), kl_loss_list,
+                        label="kl loss", color='#ff7f0e')
 
         plt.savefig(self.stats_dir / Path('Recon_KL_Comp_2.png'))
+
+    
 
     def make_paretoish_graph(self):
 
@@ -220,7 +231,8 @@ class AnalyzeResults():
         colors = np.arange(len(recon_pts[skip_pts:]))
 
         # create a scatter plot on the axes with colors indicating the order
-        sc = ax.scatter(recon_pts[skip_pts:], kl_pts[skip_pts:], s=1, c=colors, cmap='viridis')
+        sc = ax.scatter(recon_pts[skip_pts:], kl_pts[skip_pts:],
+                        s=1, c=colors, cmap='viridis')
 
         # Give the plot a title and labels
         ax.set_xlabel('Recon Loss')
@@ -238,6 +250,44 @@ class AnalyzeResults():
         self.make_paretoish_graph()
         self.compare_recon_kl_losses()  
         self.compare_recon_kl_losses2()
+
+    def make_log_var_movie(self):
+
+        with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
+            mu, log_var = pickle.load(f)
+
+        lower_lim = np.percentile(np.percentile(log_var, 2, axis=1), 2)
+        upper_lim = np.percentile(np.percentile(log_var, 98, axis=1), 99)
+
+        writer = imageio.get_writer(self.movies_dir / "direct_log_var.mp4", 
+                                    fps=20)
+
+        for ctr, curr_data in enumerate(tqdm(log_var, 
+                                             desc='Making movie for log var')):
+            plot_data = np.sort(curr_data.numpy())
+            fig, ax = plt.subplots()
+            ax.set_xlabel('Ordered Indices')
+            ax.set_ylabel('Log Var')
+            ax.axis([0,512, lower_lim, upper_lim])
+            ax.set_title('Sample'+ str(ctr))
+            ax.scatter(range(512), plot_data, s=3, color='cadetblue')
+            ax.axhline(y=0, color='lightsteelblue')
+
+            # Convert the figure to an image
+            canvas = FigureCanvas(fig)
+            canvas.draw()
+            buf = canvas.buffer_rgba()
+            image = Image.frombytes('RGBA', canvas.get_width_height(),
+                                    bytes(buf), 'raw', 'RGBA', 0, 1)
+
+            # Write the image to the movie file
+            writer.append_data(np.array(image))
+
+            # Close the figure
+            plt.close(fig)
+        
+        # Close Writer
+        writer.close()
 
     def make_paretoish_movie(self):
 
@@ -262,7 +312,8 @@ class AnalyzeResults():
         frame_delta = int(0.1 * frame_len)
         num_frames = int((num_points - frame_len)/frame_delta) + 1
 
-        for idx in tqdm(range(num_frames+1), desc='Making movie for paretoish'):
+        for idx in tqdm(range(num_frames+1),
+                        desc='Making movie for paretoish'):
 
             # Find start & stop data points for this frame
             start = idx * frame_delta
@@ -279,7 +330,8 @@ class AnalyzeResults():
             colors = np.arange(len(r_pts))
 
             # create a scatter plot on the axes with colors indicating the order
-            sc = ax.scatter(r_pts, k_pts, s=1, c=colors, cmap='viridis')
+            sc = ax.scatter(r_pts, k_pts, s=1,
+                            c=colors, cmap='viridis')
             ax.set_xlabel('Recon Loss')
             ax.set_ylabel('KL Loss')
             ax.set_xlim([min_x, max_x])
@@ -292,7 +344,8 @@ class AnalyzeResults():
             canvas = FigureCanvas(fig)
             canvas.draw()
             buf = canvas.buffer_rgba()
-            image = Image.frombytes('RGBA', canvas.get_width_height(), bytes(buf), 'raw', 'RGBA', 0, 1)
+            image = Image.frombytes('RGBA', canvas.get_width_height(),
+                                    bytes(buf), 'raw', 'RGBA', 0, 1)
 
             # Write the image to the movie file
             writer.append_data(np.array(image))
@@ -318,6 +371,7 @@ if __name__ == "__main__":
     ar.compare_recon_kl_losses2()
     ar.make_paretoish_graph()
     ar.make_images_movie()
+    ar.make_log_var_movie()
     if args.stat_graphs:
         ar.make_mu_log_var_graphs()
     
