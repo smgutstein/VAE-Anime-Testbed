@@ -67,65 +67,9 @@ class AnalyzeResults():
         frames.sort(key=frame_num)
 
         # Make movie
-        self.make_movie(frames, 'vae_movie.mp4', 10)
-
-    def make_mu_log_var_graphs(self):
-        with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
-            mu, log_var = pickle.load(f)
-
-        def make_graphs(data, y_label, file_prefix, file_dir, sort_data=True):
-            lower_lim = np.percentile(np.percentile(data, 5, axis=1), 10)
-            upper_lim = np.percentile(np.percentile(data, 95, axis=1), 90)
-
-            for ctr, curr_data in enumerate(tqdm(data, desc="Processing " + y_label)):
-                if sort_data:   
-                    plot_data = np.sort(curr_data.numpy())
-                    final_file_dir = file_dir / Path('sorted')
-                else:
-                    plot_data = curr_data.numpy()
-                    final_file_dir = file_dir / Path('unsorted')
-                final_file_dir.mkdir(parents=True, exist_ok=True)
-                fig, ax = plt.subplots()
-                ax.set_xlabel('Ordered Indices')
-                ax.set_ylabel(y_label)
-                ax.axis([0,512, lower_lim, upper_lim])
-                ax.set_title('Sample'+ str(ctr))
-                #ax.plot(range(512), plot_data, '.', color='blue')
-                ax.scatter(range(512), plot_data, s=3, color='cadetblue')
-                ax.axhline(y=0, color='lightsteelblue')
-                plt_name = Path(file_prefix + str(ctr) + '.png')
-                plt.savefig(final_file_dir / plt_name)
-                plt.close('all')
-
-            
-            def frame_num(in_path):
-                frame_num = int(in_path.name.split('_')[-1].split('.')[0])
-                return frame_num
-
-            graph_files = sorted([x for x in Path(final_file_dir).iterdir() 
-                            if x.name.startswith(file_prefix)],
-                            key=frame_num)
-            return graph_files
-
-        # Make log var movie      
-        log_var_graph_files = make_graphs(log_var, 'Log Var', 
-                                          'log_var_', 
-                                          self.raw_log_var_graphs_dir)
-        self.make_movie(log_var_graph_files, 'sorted_log_var.mp4', 20)
-
-        # Make movie without sorting values in each frame
-        log_var_graph_files2 = make_graphs(log_var, 'Log Var', 
-                                          'log_var_', self.raw_log_var_graphs_dir, False)
-        self.make_movie(log_var_graph_files2, 'unsorted_log_var.mp4', 20)
-
-        # Make mu movie
-        mu_graph_files = make_graphs(mu, 'mu', 
-                                     'mu_', self.raw_mu_graphs_dir)
-        self.make_movie(mu_graph_files, 'mu.mp4', 20)   
-
-    def make_movie(self, file_list, movie_name, fps):
-        writer = imageio.get_writer(self.movies_dir / movie_name, fps=fps)
-        for file in tqdm(file_list, desc='Making movie for ' + movie_name[:-4]):
+        movie_name = 'vae_movie.mp4'
+        writer = imageio.get_writer(self.movies_dir / movie_name, fps=10)
+        for file in tqdm(frames, desc='Making movie for ' + movie_name[:-4]):
             im = imageio.imread(file)
             writer.append_data(im)
         writer.close()
@@ -251,19 +195,26 @@ class AnalyzeResults():
         self.compare_recon_kl_losses()  
         self.compare_recon_kl_losses2()
 
-    def make_log_var_movie(self):
+    def make_mu_log_var_movie(self, log_var_graph=True):
 
         with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
             mu, log_var = pickle.load(f)
 
-        lower_lim = np.percentile(np.percentile(log_var, 2, axis=1), 2)
-        upper_lim = np.percentile(np.percentile(log_var, 98, axis=1), 99)
+        if log_var_graph:
+            data = log_var
+            graph_name="log_var.mp4"
+        else:
+            data = mu
+            graph_name="mu.mp4"
 
-        writer = imageio.get_writer(self.movies_dir / "direct_log_var.mp4", 
+        lower_lim = np.percentile(np.percentile(data, 2, axis=1), 2)
+        upper_lim = np.percentile(np.percentile(data, 98, axis=1), 99)
+
+        writer = imageio.get_writer(self.movies_dir / graph_name, 
                                     fps=20)
 
-        for ctr, curr_data in enumerate(tqdm(log_var, 
-                                             desc='Making movie for log var')):
+        for ctr, curr_data in enumerate(tqdm(data, 
+                                             desc='Making movie for ' + graph_name[:-4])):
             plot_data = np.sort(curr_data.numpy())
             fig, ax = plt.subplots()
             ax.set_xlabel('Ordered Indices')
