@@ -89,9 +89,11 @@ class VAE_Trainer:
         self.kl_adj_factor_queue = deque(maxlen=self.running_window)
         self.kl_adj_factor_delta_queue = deque(maxlen=self.running_window)
 
-        # Initialize Delta Generator
+        # Initialize Delta Generator 
+        #   Creates increment & decrement functions 
+        #   that multiply/divide by  1+self.kl_adj_update_factor
         self.delta_gen = delta_generator(delt_mul, delt_div, self.kl_adj_update_factor)
-        self.inc = self.delta_gen.inc_func
+        self.inc = self.delta_gen.inc_func 
         self.dec = self.delta_gen.dec_func
 
     def load_config_file(self):
@@ -233,11 +235,13 @@ class VAE_Trainer:
 
                         # Scale losses
                         if (curr_loss_recon >= prev_loss_recon):
-                            # Emphasize KL Loss whenever possible
+                            # Recon loss is getting worse, decrease emphasis on KL Loss
                             self.kl_adj_factor = self.dec(self.kl_adj_factor) #/= 2
                         elif (curr_loss_recon < prev_loss_recon):
                             # If recon loss improves, increase emphasis on KL Loss
                             self.kl_adj_factor = self.inc(self.kl_adj_factor) #*= 2
+
+                        # Cap KL Loss Factor - This is tragically arbitrary
                         self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
 
                         # Adjust Max KL Loss Factor - if just bouncing tween max & 0.5max values
@@ -251,12 +255,19 @@ class VAE_Trainer:
                         num_ups = sum([1 for x in self.kl_adj_factor_delta_queue if x > 0]) 
                         num_downs = sum([1 for x in self.kl_adj_factor_delta_queue if x < 0])  
                         test3 = (num_ups + num_downs) >= running_window-1
-                        if test1 and test2 and test3:
-                            self.kl_adj_factor_max *= 0.9
-                            self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max) 
+                        if test1 and test3:
+                            self.kl_adj_update_factor *= 0.9
+                            self.delta_gen = delta_generator(delt_mul, delt_div, 
+                                                             self.kl_adj_update_factor)
+                            self.inc = self.delta_gen.inc_func 
+                            self.dec = self.delta_gen.dec_func
+
+                            #self.kl_adj_factor_max *= 0.9
+                            #self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max) 
                             self.kl_adj_factor_queue.clear()
                             self.kl_adj_factor_queue.append(self.kl_adj_factor)
-                            print(f"Lowering kl_adj_max to {self.kl_adj_factor_max}")
+                            self.kl_adj_factor_delta_queue.clear()
+                            #print(f"Lowering kl_adj_max to {self.kl_adj_factor_max}")
 
                         prev_loss_recon = curr_loss_recon
                         prev_loss_kl = curr_loss_kl
