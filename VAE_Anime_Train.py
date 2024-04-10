@@ -240,38 +240,43 @@ class VAE_Trainer:
                         if (curr_loss_recon >= prev_loss_recon):
                             # Recon loss is getting worse, decrease emphasis on KL Loss
                             self.kl_adj_factor = self.dec(self.kl_adj_factor) #/= 2
+                            adj_str = "-"
                         elif (curr_loss_recon < prev_loss_recon):
-                            # If recon loss improves, increase emphasis on KL Loss
+                            # If recon loss improves, but kl didn't
                             self.kl_adj_factor = self.inc(self.kl_adj_factor) #*= 2
+                            adj_str = "+"
+                        else:
+                            # Silly case that no longer occurs
+                            adj_str = "0"
 
                         # Cap KL Loss Factor - This is tragically arbitrary
                         self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
 
-                        # Adjust Max KL Loss Factor - if just bouncing tween max & 0.5max values
+                        # Check if kl_adj_factor is bouncing too much at top of range
+                        # If so, decrease the update factor
+                       
+
                         self.kl_adj_factor_queue.append(self.kl_adj_factor)
                         if len(self.kl_adj_factor_queue) >= 2:
                             delta = sign(self.kl_adj_factor_queue[-1] -
                                          self.kl_adj_factor_queue[-2])
                             self.kl_adj_factor_delta_queue.append(delta)
-                        test1 = max(self.kl_adj_factor_queue) == self.kl_adj_factor_max
-                        test2 = min(self.kl_adj_factor_queue) == self.kl_adj_factor_max/2
                         num_ups = sum([1 for x in self.kl_adj_factor_delta_queue if x > 0]) 
                         num_downs = sum([1 for x in self.kl_adj_factor_delta_queue if x < 0])  
-                        test3 = (num_ups + num_downs) >= running_window-1
+
+                        test1 = max(self.kl_adj_factor_queue) == self.kl_adj_factor_max
+                        test2 = (num_ups + num_downs) >= running_window-1
                         
-                        if test1 and test3:
+                        if test1 and test2:
                             self.kl_adj_update_factor *= 0.9
                             self.delta_gen = delta_generator(delt_mul, delt_div, 
                                                              self.kl_adj_update_factor)
                             self.inc = self.delta_gen.inc_func 
                             self.dec = self.delta_gen.dec_func
 
-                            #self.kl_adj_factor_max *= 0.9
-                            #self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max) 
                             self.kl_adj_factor_queue.clear()
                             self.kl_adj_factor_queue.append(self.kl_adj_factor)
                             self.kl_adj_factor_delta_queue.clear()
-                            #print(f"Lowering kl_adj_max to {self.kl_adj_factor_max}")
 
                         prev_loss_recon = curr_loss_recon
                         prev_loss_kl = curr_loss_kl
@@ -281,7 +286,7 @@ class VAE_Trainer:
                         tempn1 = min(self.kl_adj_factor_queue)
                         loss_file.write(f"{epoch}     --  {step}   --  {loss_recon:.4f}")
                         loss_file.write(f"-- {loss_kl:.4e}  -- {self.kl_adj_factor:.4e}  ")
-                        loss_file.write(f"{test1} {test2} {test3} {num_ups} {num_downs} ")
+                        loss_file.write(f"{test1} {test2} {num_ups} {num_downs} ")
                         loss_file.write(f"{tempx1} {tempn1} {len(self.kl_adj_factor_queue)}  \n")
                         loss_tot = loss_recon + self.kl_adj_factor*loss_kl
                         
@@ -334,6 +339,7 @@ class VAE_Trainer:
                     out_str = f"Epoch: {epoch} step: {step} "
                     out_str += f"recon loss = {loss_recon.numpy():.4f} "
                     out_str += f"kl_loss = {loss_kl.numpy():.4e} "
+                    out_str += f" {adj_str} "
                     out_str += f"kl_adj_factor = {self.kl_adj_factor:.4e} "
                     out_str += f"tot run time = {str(tot_delta_time)}"
                     print(out_str)
