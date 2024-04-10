@@ -176,7 +176,7 @@ class AnalyzeResults():
 
         # create a scatter plot on the axes with colors indicating the order
         sc = ax.scatter(recon_pts[skip_pts:], kl_pts[skip_pts:],
-                        s=1, c=colors, cmap='viridis')
+                        s=1, c=colors, cmap='winter')
 
         # Give the plot a title and labels
         ax.set_xlabel('Recon Loss')
@@ -282,7 +282,7 @@ class AnalyzeResults():
 
             # create a scatter plot on the axes with colors indicating the order
             sc = ax.scatter(r_pts, k_pts, s=1,
-                            c=colors, cmap='viridis')
+                            c=colors, cmap='winter')
             ax.set_xlabel('Recon Loss')
             ax.set_ylabel('KL Loss')
             ax.set_xlim([min_x, max_x])
