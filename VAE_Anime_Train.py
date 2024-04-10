@@ -42,11 +42,14 @@ class VAE_Trainer:
         # Set the output directories
         parent_output_dir = Path(self.parent_dir)
         parent_output_dir.mkdir(parents=True, exist_ok=True)
-        num_expts = len([d for d in parent_output_dir.iterdir() 
-                            if d.is_dir() and "original_images" not in str(d)])
+        num_expts = max([int(d.name.split('_')[1]) 
+                         for d in parent_output_dir.iterdir()
+                         if d.is_dir() and 'expt_' in d.name])
+        
         self.output_dir = parent_output_dir / f"expt_{num_expts+1}"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy(self.config_file, self.output_dir / Path("config.ini")) 
+        print(f"Storing Expt {num_expts+1} in {self.output_dir}")
 
 
         # Record the git hash used for this run
@@ -255,6 +258,7 @@ class VAE_Trainer:
                         num_ups = sum([1 for x in self.kl_adj_factor_delta_queue if x > 0]) 
                         num_downs = sum([1 for x in self.kl_adj_factor_delta_queue if x < 0])  
                         test3 = (num_ups + num_downs) >= running_window-1
+                        
                         if test1 and test3:
                             self.kl_adj_update_factor *= 0.9
                             self.delta_gen = delta_generator(delt_mul, delt_div, 
