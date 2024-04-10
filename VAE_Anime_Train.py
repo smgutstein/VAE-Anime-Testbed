@@ -254,8 +254,6 @@ class VAE_Trainer:
 
                         # Check if kl_adj_factor is bouncing too much at top of range
                         # If so, decrease the update factor
-                       
-
                         self.kl_adj_factor_queue.append(self.kl_adj_factor)
                         if len(self.kl_adj_factor_queue) >= 2:
                             delta = sign(self.kl_adj_factor_queue[-1] -
@@ -265,7 +263,10 @@ class VAE_Trainer:
                         num_downs = sum([1 for x in self.kl_adj_factor_delta_queue if x < 0])  
 
                         test1 = max(self.kl_adj_factor_queue) == self.kl_adj_factor_max
-                        test2 = (num_ups + num_downs) >= running_window-1
+                        num_maxes = sum([1 for x in self.kl_adj_factor_queue 
+                                        if x == self.kl_adj_factor_max])
+                        
+                        test2 = num_maxes > .4*len(self.kl_adj_factor_queue)
                         
                         if test1 and test2:
                             self.kl_adj_update_factor *= 0.9
@@ -309,8 +310,11 @@ class VAE_Trainer:
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
 
+                    # Track means and variances of mu and log_var
                     mu_list.append(tf.reduce_mean(mu,0))
                     log_var_list.append(tf.reduce_mean(log_var,0))
+
+                    # Track variances of mu and log_var
                     mu_list2.append(tf.math.reduce_variance(mu,0))
                     log_var_list2.append(tf.math.reduce_variance(log_var,0))
 
