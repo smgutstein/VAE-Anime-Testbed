@@ -271,8 +271,10 @@ class AnalyzeResults():
             stop = min(idx * frame_delta + frame_len, num_points)
 
             # Slice out the data points for this frame
-            r_pts = recon_pts[start:stop]
-            k_pts = kl_pts[start:stop]
+            #r_pts = recon_pts[start:stop]
+            #k_pts = kl_pts[start:stop]
+            r_pts = recon_pts[0:stop]
+            k_pts = kl_pts[0:stop]
             
             # Create a figure
             fig, ax = plt.subplots()
@@ -280,13 +282,20 @@ class AnalyzeResults():
             # create a color map
             colors = np.arange(len(r_pts))
 
-            # create a scatter plot on the axes with colors indicating the order
+            # create a scatter plot of old points
+            #if idx != 0:
+            #    r_old_pts = recon_pts[0:start]
+            #    k_old_pts = kl_pts[0:start]
+            #    ax.scatter(r_old_pts, k_old_pts, s=1,
+            #                c='gray')
+            # create a scatter plot with colors indicating temporal order
             sc = ax.scatter(r_pts, k_pts, s=1,
                             c=colors, cmap='winter')
             ax.set_xlabel('Recon Loss')
             ax.set_ylabel('KL Loss')
             ax.set_xlim([min_x, max_x])
             ax.set_ylim([min_y, max_y])
+            ax.set_yscale('log')
             # add a colorbar
             color_bar = fig.colorbar(sc)
             color_bar.set_label("Pt Number")
