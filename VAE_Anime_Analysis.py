@@ -188,12 +188,34 @@ class AnalyzeResults():
         color_bar.set_label("Pt Number")
 
         # Save graph
-        plt.savefig(self.stats_dir / Path('Paretoish.png'))     
+        plt.savefig(self.stats_dir / Path('Paretoish.png'))   
+        print(f"Saved {self.stats_dir / Path('Paretoish.png')}")  
 
     def make_singleton_graphs(self):
         self.make_paretoish_graph()
+        self.make_final_mu_log_var_graphs()
         self.compare_recon_kl_losses()  
         self.compare_recon_kl_losses2()
+
+    def make_final_mu_log_var_graphs(self):
+    
+        with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
+            mu, log_var = pickle.load(f)
+
+        graph_list = [(mu[-1], 'mu.png'), (log_var[-1], 'log_var.png')]
+        for data, graph_name in graph_list:
+            plot_data = np.sort(data.numpy())
+            fig, ax = plt.subplots()
+            ax.set_xlabel('Ordered Indices')
+            ax.set_ylabel(graph_name[:-4])
+            ax.set_title('Final '+ graph_name[:-4])
+            ax.scatter(range(len(data)), plot_data, s=3, color='cadetblue')
+            ax.axhline(y=0, color='lightsteelblue')
+            plt.savefig(self.stats_dir / Path(graph_name))
+            print(f" Saved {self.stats_dir / Path(graph_name)}")
+    
+
+
 
     def make_mu_log_var_movie(self, log_var_graph=True):
 
@@ -218,10 +240,10 @@ class AnalyzeResults():
             plot_data = np.sort(curr_data.numpy())
             fig, ax = plt.subplots()
             ax.set_xlabel('Ordered Indices')
-            ax.set_ylabel('Log Var')
-            ax.axis([0,512, lower_lim, upper_lim])
+            ax.set_ylabel(graph_name[:-4])
+            ax.axis([0,len(plot_data), lower_lim, upper_lim])
             ax.set_title('Sample'+ str(ctr))
-            ax.scatter(range(512), plot_data, s=3, color='cadetblue')
+            ax.scatter(range(len(plot_data)), plot_data, s=3, color='cadetblue')
             ax.axhline(y=0, color='lightsteelblue')
 
             # Convert the figure to an image
@@ -239,6 +261,7 @@ class AnalyzeResults():
         
         # Close Writer
         writer.close()
+        print(f"Saved {self.movies_dir / graph_name}")
 
     def make_paretoish_movie(self):
 
@@ -289,9 +312,6 @@ class AnalyzeResults():
             ax.set_xlim([min_x, max_x])
             ax.set_ylim([min_y, max_y])
             ax.set_yscale('log')
-            # add a colorbar
-            #color_bar = fig.colorbar(sc)
-            #color_bar.set_label("Pt Number")
 
             # Convert the figure to an image
             canvas = FigureCanvas(fig)
@@ -308,6 +328,7 @@ class AnalyzeResults():
             
         # Close the writer
         writer.close()   
+        print(f"Saved {self.movies_dir / 'paretoish.mp4'}")
 
 
 if __name__ == "__main__":
@@ -320,11 +341,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     ar = AnalyzeResults(args.config_file)
-    ar.compare_recon_kl_losses()    
-    ar.compare_recon_kl_losses2()
-    ar.make_paretoish_graph()
+    ar.make_singleton_graphs()  
     ar.make_images_movie()
-    ar.make_log_var_movie()
-    if args.stat_graphs:
-        ar.make_mu_log_var_graphs()
+    ar.make_mu_log_var_movie(log_var_graph=True)
+    ar.make_mu_log_var_movie(log_var_graph=False)
+    ar.make_paretoish_movie()
     
