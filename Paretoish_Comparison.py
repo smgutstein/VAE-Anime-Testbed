@@ -43,9 +43,10 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
                     s=1, c='indianred', label=f'Expt {expt2_num}')
 
     # Give the plot a title and labels
+    ax[0].set_title('Pareto-ish Graph')
     ax[0].set_xlabel('Recon Loss')
     ax[0].set_ylabel('KL Loss')
-    ax[0].set_title('Pareto-ish Graph')
+    ax[0].set_yscale('log')
     ax[0].legend()
 
     # Now repeat in reverse order to avoid overlap confusion
@@ -61,6 +62,7 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
     # Give the plot a title and labels
     ax[1].set_xlabel('Recon Loss')
     ax[1].set_ylabel('KL Loss')
+    ax[1].set_yscale('log')
     ax[1].legend()
 
     plt.savefig(output_dir / Path(f'Paretoish_{expt1_num}_{expt2_num}.png'))
