@@ -271,8 +271,6 @@ class AnalyzeResults():
             stop = min(idx * frame_delta + frame_len, num_points)
 
             # Slice out the data points for this frame
-            #r_pts = recon_pts[start:stop]
-            #k_pts = kl_pts[start:stop]
             r_pts = recon_pts[0:stop]
             k_pts = kl_pts[0:stop]
             
@@ -282,12 +280,7 @@ class AnalyzeResults():
             # create a color map
             colors = np.arange(len(r_pts))
 
-            # create a scatter plot of old points
-            #if idx != 0:
-            #    r_old_pts = recon_pts[0:start]
-            #    k_old_pts = kl_pts[0:start]
-            #    ax.scatter(r_old_pts, k_old_pts, s=1,
-            #                c='gray')
+
             # create a scatter plot with colors indicating temporal order
             sc = ax.scatter(r_pts, k_pts, s=1,
                             c=colors, cmap='winter')
@@ -297,8 +290,8 @@ class AnalyzeResults():
             ax.set_ylim([min_y, max_y])
             ax.set_yscale('log')
             # add a colorbar
-            color_bar = fig.colorbar(sc)
-            color_bar.set_label("Pt Number")
+            #color_bar = fig.colorbar(sc)
+            #color_bar.set_label("Pt Number")
 
             # Convert the figure to an image
             canvas = FigureCanvas(fig)
