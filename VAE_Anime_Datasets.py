@@ -10,7 +10,27 @@ import zipfile
 
 
 class Datasets():
+    ''' This class is used to download and display images to be for a VAE model.
+    It currently assumes that the images are of anime faces. But this is
+    subject to change.
+
+    It has the following methods:  
+    0. __init__: initializes the class, creates the output directory,
+                and sets flags indicating things to be done.      
+    1. set_data_params: sets the batch size and image size.
+    2. download_data: downloads the dataset.
+    3. make_train_and_validation_sets: creates training and validation datasets.
+    4. display_train_data: displays a sample of the training dataset.
+    5. display_validation_data: displays a sample of the validation dataset.
+    6. display_sample_data: displays a sample of the dataset specified by the user.
+
+    
+    '''
     def __init__(self, output_dir="scratch_output"):
+        '''Initializes the class, creates the output directory, 
+        using "scratch_output" as the default,     
+        and sets flags indicating things to be done.'''
+
         self.data_params_set = False
         self.data_downloaded = False
         self.datasets_made = False
@@ -23,12 +43,16 @@ class Datasets():
     def set_data_params(self, 
                         batch_size = 1500,
                         image_size = 64):
-        
+        '''Sets the batch size and 
+        the desired size of square images for the dataset.'''
         self.batch_size = batch_size
         self.image_size = image_size
         self.data_params_set = True
 
     def download_data(self):
+        '''Downloads the dataset if it has not been downloaded.
+        Currently, the dataset is a zipped file of anime faces.'''
+
         # make the data directory
         Path('/tmp/anime').mkdir(exist_ok=True)
         if len(list(Path('/tmp/anime').glob('*'))) < 10:
@@ -45,6 +69,9 @@ class Datasets():
         self.data_downloaded = True
 
     def make_train_and_validation_sets(self):
+        '''Creates training and validation datasets from the downloaded images.
+        The images are preprocessed and reshaped to the desired size.'''
+
         if self.datasets_made:
             return
         if not self.data_downloaded:
@@ -69,6 +96,9 @@ class Datasets():
             image = tf.cast(image, dtype=tf.float32)
             image = tf.image.resize(image, (self.image_size, 
                                             self.image_size))
+            # Normalizes the images to the range of [0., 1.]
+            # Also assumes images are in [0, 255]. This 
+            # may need to change if other datasets are used.
             image = image / 255.0  
             image = tf.reshape(image, shape=(self.image_size, 
                                             self.image_size, 
@@ -101,6 +131,7 @@ class Datasets():
         validation_dataset = validation_dataset.map(map_image)
         validation_dataset = validation_dataset.batch(self.batch_size)
 
+        # set the training and validation datasets and print the number of batches in each
         self.training_dataset = training_dataset
         self.validation_dataset = validation_dataset
         self.datasets_made = True
@@ -116,7 +147,9 @@ class Datasets():
 
 
     def display_sample_data(self, dataset_choice, size):
-        '''Takes a sample from a dataset batch, plots it in a grid, and saves/plots it.'''
+        '''Takes a desired number of samples 
+        from either train or validation set,
+        plots them in a grid, and saves the plot'''
         if not self.datasets_made:
             self.make_train_and_validation_sets()
         if dataset_choice[0].lower() == "t":
@@ -129,13 +162,17 @@ class Datasets():
             print("You must choose either the training or validation set with either a 't' or 'v' respectively.")
             return
 
+        # Get desired number of samples from the dataset
         dataset = dataset.unbatch().take(size)
+
+        # Set grid dimensions
         n_cols = round(np.sqrt(size))
         n_rows = size // n_cols + 1
         plt.figure(figsize=(5, 5))
-        i = 0
+
+        # Display the images in a grid
+        i = 1
         for image in dataset:
-            i += 1
             disp_img = np.reshape(image, (64, 64, 3))
             plt.subplot(n_rows, n_cols, i)
             plt.xticks([])
@@ -144,7 +181,10 @@ class Datasets():
             # Set the title of the window
             plt.gcf().canvas.manager.set_window_title(data_samp_set + " Images")
             plt.imshow(disp_img)
+            i += 1
 
+        # Save the plot, if output directory is specified. 
+        # Default shd be "scratch_output"
         if self.output_dir:
             trgt_dir = self.output_dir / "original_images"
             trgt_dir.mkdir(parents=True, exist_ok=True)
@@ -157,6 +197,7 @@ class Datasets():
 
 
 if __name__ == '__main__':
+    # Test code
     parser = argparse.ArgumentParser(description= 'Specify output directory')
     parser.add_argument('-o', '--output_dir', type=str, 
                         default='scratch_output', help='Output directory')
