@@ -169,7 +169,7 @@ class AnalyzeResults():
 
         fig, ax = plt.subplots()
 
-        skip_pts = int(.10*len(recon_pts))
+        skip_pts = int(.05*len(recon_pts))
         
         # create a color map
         colors = np.arange(len(recon_pts[skip_pts:]))
@@ -280,8 +280,8 @@ class AnalyzeResults():
         writer = imageio.get_writer(self.movies_dir / "paretoish.mp4", fps=5)
         
         num_points = len(fl[1:])
-        min_x, max_x = np.percentile(np.array(recon_pts),[0,95])
-        min_y, max_y = np.percentile(np.array(kl_pts),[0,95])
+        min_x, max_x = np.percentile(np.array(recon_pts),[0,98])
+        min_y, max_y = np.percentile(np.array(kl_pts),[0,98])
         frame_len = int(0.05 * num_points)
         frame_delta = int(0.1 * frame_len)
         num_frames = int((num_points - frame_len)/frame_delta) + 1
@@ -343,7 +343,9 @@ if __name__ == "__main__":
     ar = AnalyzeResults(args.config_file)
     ar.make_singleton_graphs()  
     ar.make_images_movie()
-    ar.make_mu_log_var_movie(log_var_graph=True)
-    ar.make_mu_log_var_movie(log_var_graph=False)
     ar.make_paretoish_movie()
+    if args.stat_graphs:
+        ar.make_mu_log_var_movie(log_var_graph=True)
+        ar.make_mu_log_var_movie(log_var_graph=False)
+
     
