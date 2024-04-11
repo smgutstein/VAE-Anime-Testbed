@@ -6,6 +6,7 @@ import time
 
 
 def read_config_file(filename):
+    '''Reads a configuration file and returns a ConfigParser object.'''
     config = configparser.ConfigParser()
     config.read(filename)
     return config
@@ -25,6 +26,7 @@ def is_config_file(filename):
         return False
     
 def get_git_hash():
+    '''Returns the info needed to recreate experiment from git records.'''
     branch_str = sp.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
     hash_str =  sp.check_output(['git', 'log', '-n', '1']).decode("utf-8").strip()
     diff_str = sp.check_output(['git', 'diff']).decode("utf-8").strip()
@@ -76,6 +78,10 @@ def delt_div(x,y):
     return x / y
     
 class delta_generator():
+    '''Overly generalized function used to give more flexibility
+       in how I would update the kl_adj_factor. The idea is to  
+       have a function that can be customized to increase or
+       decrease the kl_adj_factor in a variety of ways.'''
     def __init__(self, delta_inc_func, delta_dec_func, delta):
 
         self.delta = delta
