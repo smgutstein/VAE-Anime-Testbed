@@ -10,7 +10,7 @@ import tensorflow_datasets as tfds
 from collections import defaultdict
 from collections import deque
 from datetime import timedelta
-from IPython import display
+#from IPython import display
 from pathlib import Path
 from time import time, ctime
 
@@ -25,11 +25,12 @@ from utils import read_config_file
 from utils import sign
 
 class VAE_Trainer:
+    '''Class to train the VAE model on the anime faces dataset'''
 
+    # Initialize the loss metrics
     loss_metric_recon = tf.keras.metrics.Mean()
     loss_metric_kl = tf.keras.metrics.Mean()
     mse_loss = tf.keras.losses.MeanSquaredError()
-    bce_loss = tf.keras.losses.BinaryCrossentropy()
 
     def __init__(self, config_file="config.ini"):
         # Load the config file
@@ -59,6 +60,7 @@ class VAE_Trainer:
             f.write(hash_str)
             f.write("\n")   
 
+        # Set up the output directories
         self.raw_image_dir = self.output_dir / "raw_images"
         self.raw_image_dir.mkdir(parents=True, exist_ok=True)
 
@@ -100,6 +102,7 @@ class VAE_Trainer:
         self.dec = self.delta_gen.dec_func
 
     def load_config_file(self):
+        '''Load the config file and set the parameters for training the VAE model.'''
         config = read_config_file(self.config_file)
         
         self.epochs = int(config.get('Training_Parameters', 'epochs'))      
@@ -110,6 +113,8 @@ class VAE_Trainer:
                                                      'kl_adj_update_factor'))
         self.running_window = int(config.get('Training_Parameters', 'running_window'))
         self.parent_dir = config.get('Output_Parameters', 'parent_dir')
+
+        #Determine if the model should be saved
         temp = config.get('Output_Parameters', 'save_net').lower() 
         if temp == 'true' or temp == '1':
             self.save_net = True            
@@ -123,6 +128,15 @@ class VAE_Trainer:
 
     def snapshot_vae_behavior (self, epoch=0, step=0, 
                                recon_loss=0, kl_loss=0):
+        """ Takes a snapshot of the VAE's behavior at a given epoch and step,
+            by creating a 4x8 grid of images. The first row is the input images,
+            the second row is the VAE's reconstruction of those images,
+            the third row is the average face created by the decoder,
+            and the fourth row is a random face created by the decoder. The
+            first 4 columns are fixed, while the last 4 columns are random.
+            Each image is saved to a file in the raw_images directory, from
+            where a movie of the evolving behavior of the VAE can be created.
+        """
 
         # Get 1 batch from validation set and convert
         # to list of numpy arrays
@@ -157,24 +171,28 @@ class VAE_Trainer:
         num_idxs = 8
         fig = plt.figure(figsize=(8,5))
         for ctr,idx in enumerate(test_img_idxs):
+            # Display the input images
             plt.subplot(4, num_idxs, ctr+1)
             img1 = output_samples[idx, :, :, :] * 255
             img1 = img1.astype('int32')
             plt.axis('off')
             plt.imshow(img1)
             
+            # Display the VAE's reconstruction of the input images
             plt.subplot(4, num_idxs, ctr+1+num_idxs)
             img2 = vae_predicted[idx, :, :, :] * 255
             img2 = img2.astype('int32')
             plt.axis('off')
             plt.imshow(img2)
 
+            # Display the average face created by the decoder
             plt.subplot(4, num_idxs, ctr+1+2*num_idxs)
             img3 = avg_images[ctr, :, :, :] * 255
             img3 = img3.astype('int32')
             plt.axis('off')
             plt.imshow(img3)
 
+            # Display a random face created by the decoder
             plt.subplot(4, num_idxs, ctr+1+3*num_idxs)
             img4 = gen_images[ctr, :, :, :] * 255
             img4 = img4.astype('int32')
@@ -195,10 +213,13 @@ class VAE_Trainer:
         plt.savefig(self.raw_image_dir / Path(file_name))
 
     def train_loop(self, running_window=20):
+        '''Train the VAE model on the anime faces(for now) dataset'''
 
         # Set Timing Parameters
         start_time = time()
         print("Start Time: ", ctime())
+        #Temp variable to see if I really do adjust the update factor
+        adj_ctr = [(0,0, self.kl_adj_update_factor)] 
 
         # Initialize performance trackers
         prev_loss_recon = np.inf
@@ -262,11 +283,11 @@ class VAE_Trainer:
                         num_ups = sum([1 for x in self.kl_adj_factor_delta_queue if x > 0]) 
                         num_downs = sum([1 for x in self.kl_adj_factor_delta_queue if x < 0])  
 
-                        test1 = max(self.kl_adj_factor_queue) == self.kl_adj_factor_max
+                        # # Check if we're bouncing too much at the top of the range
                         num_maxes = sum([1 for x in self.kl_adj_factor_queue 
-                                        if x == self.kl_adj_factor_max])
-                        
-                        test2 = num_maxes > .4*len(self.kl_adj_factor_queue)
+                                        if x == self.kl_adj_factor_max])      
+                        test1 = num_maxes > .4*len(self.kl_adj_factor_queue)
+                        test2 = num_maxes < .6*len(self.kl_adj_factor_queue)
                         
                         if test1 and test2:
                             self.kl_adj_update_factor *= 0.9
@@ -278,6 +299,7 @@ class VAE_Trainer:
                             self.kl_adj_factor_queue.clear()
                             self.kl_adj_factor_queue.append(self.kl_adj_factor)
                             self.kl_adj_factor_delta_queue.clear()
+                            adj_ctr.append((epoch,step, self.kl_adj_update_factor))
 
                         prev_loss_recon = curr_loss_recon
                         prev_loss_kl = curr_loss_kl
@@ -298,7 +320,7 @@ class VAE_Trainer:
                                                        self.vae.vae_net.trainable_weights))
 
                     if step % 10 == 0:
-                        display.clear_output(wait=False)    
+                        #display.clear_output(wait=False)    
                         self.snapshot_vae_behavior(epoch, step, 
                                                     loss_recon.numpy(), 
                                                     loss_kl.numpy())
@@ -319,9 +341,7 @@ class VAE_Trainer:
                     log_var_list2.append(tf.math.reduce_variance(log_var,0))
 
                     # compute the loss metric
-                    # Remember:
-                    #   loss_metric_recon = tf.keras.metrics.Mean()
-                    #   loss_metric_kl = tf.keras.metrics.Mean()
+                    # Remember: loss_metric_recon is a tf.keras.metrics.Mean()
                     self.loss_metric_recon(loss_recon)
                     self.loss_metric_kl(loss_kl)
 
@@ -356,6 +376,8 @@ class VAE_Trainer:
             self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
         else:
             print("Model not saved")
+        print(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
+        print(adj_ctr)
 
 if __name__ == "__main__":
 
@@ -380,3 +402,5 @@ if __name__ == "__main__":
     ar.make_singleton_graphs()
     ar.make_images_movie()
     ar.make_paretoish_movie()
+    #Note: Stopped making mu & log var movies 
+    #since they're not that interesting & take too long
