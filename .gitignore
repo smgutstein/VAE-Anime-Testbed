@@ -3,3 +3,7 @@
 __pycache__/
 scratch_output/
 expts/
+config.ini
+*temp*
+*tmp*
+*zip
