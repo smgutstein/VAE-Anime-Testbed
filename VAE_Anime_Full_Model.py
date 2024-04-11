@@ -7,6 +7,7 @@ from VAE_Anime_Encoder import VAE_Encoder
 from VAE_Anime_Decoder import VAE_Decoder
 
 class KLDivergenceLossLayer(tf.keras.layers.Layer):
+    '''Give the KL Divergence Loss as a layer in the model.'''
     def __init__(self, **kwargs):
         super(KLDivergenceLossLayer, self).__init__(**kwargs)
 
@@ -19,6 +20,7 @@ class KLDivergenceLossLayer(tf.keras.layers.Layer):
 
 
 class VAE_Model():
+    '''Create a full VAE model with encoder, decoder, and VAE network.'''
     def __init__(self, enc_input_shape=(64,64,3,), 
                 latent_dim=512, output_dir="scratch_output"):
         self.enc_input_shape = enc_input_shape

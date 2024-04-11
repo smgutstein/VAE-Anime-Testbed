@@ -10,7 +10,6 @@ import tensorflow_datasets as tfds
 from collections import defaultdict
 from collections import deque
 from datetime import timedelta
-#from IPython import display
 from pathlib import Path
 from time import time, ctime
 
@@ -319,8 +318,7 @@ class VAE_Trainer:
                     self.optimizer.apply_gradients(zip(grads,
                                                        self.vae.vae_net.trainable_weights))
 
-                    if step % 10 == 0:
-                        #display.clear_output(wait=False)    
+                    if step % 10 == 0:  
                         self.snapshot_vae_behavior(epoch, step, 
                                                     loss_recon.numpy(), 
                                                     loss_kl.numpy())
