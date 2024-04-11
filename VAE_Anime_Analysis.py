@@ -275,13 +275,16 @@ class AnalyzeResults():
             data = [x.strip() for x in curr_line.split('--')]
             recon_pts.append(float(data[2]))
             kl_pts.append(float(data[3]))
-            
+
+        skip_pts = int(.05*len(recon_pts))   
+        recon_pts = recon_pts[skip_pts:]
+        kl_pts = kl_pts[skip_pts:]
         # Create a writer object
         writer = imageio.get_writer(self.movies_dir / "paretoish.mp4", fps=5)
         
         num_points = len(fl[1:])
-        min_x, max_x = np.percentile(np.array(recon_pts),[0,98])
-        min_y, max_y = np.percentile(np.array(kl_pts),[0,98])
+        min_x, max_x = np.percentile(np.array(recon_pts),[0,99.9])
+        min_y, max_y = np.percentile(np.array(kl_pts),[0,99.9])
         frame_len = int(0.05 * num_points)
         frame_delta = int(0.1 * frame_len)
         num_frames = int((num_points - frame_len)/frame_delta) + 1
