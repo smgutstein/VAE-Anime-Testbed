@@ -1,18 +1,13 @@
 import argparse
-import imageio.v2 as imageio
 import matplotlib.pyplot as plt
-import numpy as np
-import pickle
 
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.ticker import EngFormatter
 from pathlib import Path
-from tqdm import tqdm
 from utils import is_config_file
 from utils import read_config_file
 
 
 def get_datapts(expt_file):
+    '''Get the recon & kl loss values from the experiment file.'''
     with open(expt_file,'r') as f:
         fl = f.readlines()
 
@@ -51,11 +46,11 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
 
     # Now repeat in reverse order to avoid overlap confusion
     # create a scatter plot on the axes for expt2
-    sc = ax[1].scatter(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:],
+    ax[1].scatter(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:],
                     s=1, c='indianred', label=f'Expt {expt2_num}')
     
     # create a scatter plot on the axes for expt1
-    sc = ax[1].scatter(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:],
+    ax[1].scatter(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:],
                     s=1, c='cadetblue', label=f'Expt {expt1_num}')
 
 
@@ -70,7 +65,7 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
     print(f"Saved {output_dir / Path(f'Paretoish_{expt1_num}_{expt2_num}.png')}")
 
 if __name__ == "__main__":
-
+    '''Compare the pareto-ish graphs of two experiments.'''
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
     parser.add_argument('--expt1', type=int, help='Number of first experiment file')    
     parser.add_argument('--expt2', type=int, help='Number of second experiment file')
