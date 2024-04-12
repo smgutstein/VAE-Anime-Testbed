@@ -1,5 +1,6 @@
 import argparse
 import imageio.v2 as imageio
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
@@ -8,22 +9,31 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.ticker import EngFormatter
 from pathlib import Path
 from PIL import Image
-from time import time, ctime
 from tqdm import tqdm
 from utils import is_config_file
 from utils import read_config_file
 
 class AnalyzeResults():
-    def __init__(self, config_file="config.ini"):
+    def __init__(self, config_file="config.ini", expt=-1):
+
+        if expt != -1:
+            # Get the output directory for the specified expt
+            assert Path(f'./expts/expt_{expt}').exists(), "Expt directory does not exist"
+            self.config_file = f'./expts/expt_{expt}/config.ini'
+            self.parent_dir = Path(f'./expts/')
+            self.output_dir = Path(f'./expts/expt_{expt}')
 
         # Load the config file
-        assert Path(config_file).exists(), "Config file does not exist"
-        assert is_config_file(config_file), "Invalid config file"
+        assert Path(config_file).exists(), f"{config_file} does not exist"
+        assert is_config_file(config_file), f"{config_file} is invalid config file"
         
         self.config_file = config_file
 
-        # Set the output directories
-        self.get_output_dir()
+        # Get directories with results of latest expt
+        if expt == -1:
+            self.get_output_dir()
+
+        print(f"Making graphs of results in {self.output_dir}")
         self.raw_image_dir = self.output_dir / "raw_images"
 
         self.stats_dir = self.output_dir / "stats" 
@@ -79,6 +89,18 @@ class AnalyzeResults():
         with open(self.stats_dir / Path('loss_lists.pkl'), 'rb') as f:
             recon_loss_list, kl_loss_list, _ = pickle.load(f)
 
+        # Remove nan and inf values
+        recon_loss_list = [x for x in recon_loss_list 
+                           if ((not math.isnan(x)) and 
+                               (not math.isinf(x))) ]
+        kl_loss_list = [x for x in kl_loss_list 
+                        if ((not math.isnan(x)) and
+                            (not math.isinf(x))) ]
+        temp = min(len(recon_loss_list), len(kl_loss_list))
+        recon_loss_list = recon_loss_list[:temp]
+        kl_loss_list = kl_loss_list[:temp]
+
+
         fig, axes = plt.subplots(3)  # Create a figure containing a single axes.
         axes[0].set_xlabel('Iteration')
         axes[0].set_ylabel('Loss')
@@ -112,6 +134,22 @@ class AnalyzeResults():
 
         with open(self.stats_dir / Path('loss_lists.pkl'), 'rb') as f:
             recon_loss_list, kl_loss_list, adj_kl_factor_list = pickle.load(f)
+
+        # Remove nan and inf values
+        recon_loss_list = [x for x in recon_loss_list 
+                           if ((not math.isnan(x)) and 
+                               (not math.isinf(x))) ]
+        kl_loss_list = [x for x in kl_loss_list 
+                        if ((not math.isnan(x)) and
+                            (not math.isinf(x))) ]
+        adj_kl_factor_list = [x for x in adj_kl_factor_list 
+                              if ((not math.isnan(x)) and
+                                  (not math.isinf(x))) ]
+        temp = min(len(recon_loss_list), len(kl_loss_list), len(adj_kl_factor_list))
+        recon_loss_list = recon_loss_list[:temp]
+        kl_loss_list = kl_loss_list[:temp]
+        adj_kl_factor_list = adj_kl_factor_list[:temp]
+
         num_pts = len(recon_loss_list)
 
         # Create an EngFormatter object with desired precision
@@ -159,6 +197,8 @@ class AnalyzeResults():
         # Read file with recon and kl losses
         with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
             fl = f.readlines()
+        # Remove lines with nan or inf
+        fl =[x for x in fl if ('nan' not in x) and ('inf' not in x)]
 
         recon_pts=[]
         kl_pts = []
@@ -202,6 +242,17 @@ class AnalyzeResults():
         with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
             mu, log_var = pickle.load(f)
 
+        # Remove nan and inf values
+        log_var =[x for x in log_var 
+                  if (not np.isnan(x.numpy()).any()) and 
+                  (not np.isinf(x.numpy()).any())]
+        mu =[x for x in mu 
+             if (not np.isnan(x.numpy()).any()) and 
+             (not np.isinf(x.numpy()).any())]
+        temp = min(len(log_var), len(mu))
+        log_var = log_var[:temp]
+        mu = mu[:temp]
+
         graph_list = [(mu[-1], 'mu.png'), (log_var[-1], 'log_var.png')]
         for data, graph_name in graph_list:
             plot_data = np.sort(data.numpy())
@@ -215,13 +266,22 @@ class AnalyzeResults():
             print(f" Saved {self.stats_dir / Path(graph_name)}")
     
 
-
-
     def make_mu_log_var_movie(self, log_var_graph=True):
 
         with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
             mu, log_var = pickle.load(f)
 
+        # Remove nan and inf values
+        log_var =[x for x in log_var 
+                  if (not np.isnan(x.numpy()).any()) and 
+                  (not np.isinf(x.numpy()).any())]
+        mu =[x for x in mu 
+             if (not np.isnan(x.numpy()).any()) and 
+             (not np.isinf(x.numpy()).any())]
+        temp = min(len(log_var), len(mu))
+        log_var = log_var[:temp]
+        mu = mu[:temp]
+        
         if log_var_graph:
             data = log_var
             graph_name="log_var.mp4"
@@ -268,7 +328,10 @@ class AnalyzeResults():
         # Read file with recon and kl losses
         with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
             fl = f.readlines()
-            
+
+        # Remove lines with nan or inf
+        fl =[x for x in fl if ('nan' not in x) and ('inf' not in x)]   
+
         recon_pts = []
         kl_pts = []
         for curr_line in fl[1:]:  # Skipping the header
@@ -308,8 +371,8 @@ class AnalyzeResults():
 
 
             # create a scatter plot with colors indicating temporal order
-            sc = ax.scatter(r_pts, k_pts, s=1,
-                            c=colors, cmap='winter')
+            ax.scatter(r_pts, k_pts, s=1,
+                        c=colors, cmap='winter')
             ax.set_xlabel('Recon Loss')
             ax.set_ylabel('KL Loss')
             ax.set_xlim([min_x, max_x])
@@ -341,9 +404,11 @@ if __name__ == "__main__":
                         default='config.ini', help='Config file')
     parser.add_argument('-s', '--stat_graphs', action='store_true',
                         help='Get mu & sigma graphs and movie')
+    parser.add_argument('-e', '--expt', type=int, default=-1,
+                        help='Get specified expt number. Default is last expt.')
     args = parser.parse_args()
     
-    ar = AnalyzeResults(args.config_file)
+    ar = AnalyzeResults(args.config_file, args.expt)
     ar.make_singleton_graphs()  
     ar.make_images_movie()
     ar.make_paretoish_movie()
