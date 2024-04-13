@@ -10,6 +10,7 @@ from matplotlib.ticker import EngFormatter
 from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
+from utils import find_nan_or_inf_index
 from utils import is_config_file
 from utils import read_config_file
 
@@ -83,11 +84,40 @@ class AnalyzeResults():
             im = imageio.imread(file)
             writer.append_data(im)
         writer.close()
-        
-    def compare_recon_kl_losses(self):
 
-        with open(self.stats_dir / Path('loss_lists.pkl'), 'rb') as f:
-            recon_loss_list, kl_loss_list, _ = pickle.load(f)
+    def get_recon_kl_results(self):
+        recon_loss_list=[]
+        kl_loss_list=[]
+        adj_kl_factor_list=[]
+        try:
+            with open(self.stats_dir / Path('loss_lists.pkl'),'rb') as f:
+                while True:
+                    try:
+                        # Load the next object from the pickle file
+                        data = pickle.load(f)
+                        
+                        # Check if the loaded data is a list
+                        if isinstance(data, list):
+                            # Process the list data here 
+                            recon_loss_list += data[0]
+                            kl_loss_list += data[1]
+                            adj_kl_factor_list += data[2]
+                        else:
+                            # Handle unexpected data types or structures
+                            print("Unexpected data:", data)
+                    
+                    except EOFError:
+                        # Reached end of file (no more objects to load)
+                        break
+                    
+                    except Exception as e:
+                        # Handle other exceptions (e.g., pickle decode error)
+                        print("Error loading data:", e)
+        except FileNotFoundError:
+            print("File not found:", self.stats_dir / Path('loss_lists.pkl'))
+        
+        except Exception as e:
+            print("Error:", e)
 
         # Remove nan and inf values
         recon_loss_list = [x for x in recon_loss_list 
@@ -96,10 +126,27 @@ class AnalyzeResults():
         kl_loss_list = [x for x in kl_loss_list 
                         if ((not math.isnan(x)) and
                             (not math.isinf(x))) ]
-        temp = min(len(recon_loss_list), len(kl_loss_list))
+        adj_kl_factor_list = [x for x in adj_kl_factor_list 
+                              if ((not math.isnan(x)) and
+                                  (not math.isinf(x))) ]
+        
+        temp = min(len(recon_loss_list), len(kl_loss_list), len(adj_kl_factor_list))
         recon_loss_list = recon_loss_list[:temp]
         kl_loss_list = kl_loss_list[:temp]
+        adj_kl_factor_list = adj_kl_factor_list[:temp]
 
+        
+        temp = min(len(recon_loss_list), len(kl_loss_list), len(adj_kl_factor_list))
+        recon_loss_list = recon_loss_list[:temp]
+        kl_loss_list = kl_loss_list[:temp]
+        adj_kl_factor_list = adj_kl_factor_list[:temp]
+
+
+        return recon_loss_list, kl_loss_list, adj_kl_factor_list    
+        
+    def compare_recon_kl_losses(self):
+
+        recon_loss_list, kl_loss_list, _ = self.get_recon_kl_results()
 
         fig, axes = plt.subplots(3)  # Create a figure containing a single axes.
         axes[0].set_xlabel('Iteration')
@@ -132,23 +179,7 @@ class AnalyzeResults():
 
     def compare_recon_kl_losses2(self):
 
-        with open(self.stats_dir / Path('loss_lists.pkl'), 'rb') as f:
-            recon_loss_list, kl_loss_list, adj_kl_factor_list = pickle.load(f)
-
-        # Remove nan and inf values
-        recon_loss_list = [x for x in recon_loss_list 
-                           if ((not math.isnan(x)) and 
-                               (not math.isinf(x))) ]
-        kl_loss_list = [x for x in kl_loss_list 
-                        if ((not math.isnan(x)) and
-                            (not math.isinf(x))) ]
-        adj_kl_factor_list = [x for x in adj_kl_factor_list 
-                              if ((not math.isnan(x)) and
-                                  (not math.isinf(x))) ]
-        temp = min(len(recon_loss_list), len(kl_loss_list), len(adj_kl_factor_list))
-        recon_loss_list = recon_loss_list[:temp]
-        kl_loss_list = kl_loss_list[:temp]
-        adj_kl_factor_list = adj_kl_factor_list[:temp]
+        recon_loss_list, kl_loss_list, adj_kl_factor_list = self.get_recon_kl_results()
 
         num_pts = len(recon_loss_list)
 
@@ -216,7 +247,7 @@ class AnalyzeResults():
 
         # create a scatter plot on the axes with colors indicating the order
         sc = ax.scatter(recon_pts[skip_pts:], kl_pts[skip_pts:],
-                        s=1, c=colors, cmap='winter')
+                        s=1, c=colors, cmap='cool')
 
         # Give the plot a title and labels
         ax.set_xlabel('Recon Loss')
@@ -237,10 +268,39 @@ class AnalyzeResults():
         self.compare_recon_kl_losses()  
         self.compare_recon_kl_losses2()
 
-    def make_final_mu_log_var_graphs(self):
-    
-        with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
-            mu, log_var = pickle.load(f)
+    def get_mu_log_var_results(self):
+        mu=[]
+        log_var=[]
+        try:
+            with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
+                while True:
+                    try:
+                        # Load the next object from the pickle file
+                        data = pickle.load(f)
+                        
+                        # Check if the loaded data is a list
+                        if isinstance(data, list):
+                            # Process the list data here
+                            mu += data[0]
+                            log_var += data[1]
+                        else:
+                            # Handle unexpected data types or structures
+                            print("Unexpected data:", data)
+                    
+                    except EOFError:
+                        # Reached end of file (no more objects to load)
+                        break
+                    
+                    except Exception as e:
+                        # Handle other exceptions (e.g., pickle decode error)
+                        print("Error loading data:", e)  
+
+        except FileNotFoundError:
+            print("File not found:", self.stats_dir / Path('loss_lists.pkl'))
+        
+        except Exception as e:
+            print("Error:", e)
+
 
         # Remove nan and inf values
         log_var =[x for x in log_var 
@@ -249,11 +309,20 @@ class AnalyzeResults():
         mu =[x for x in mu 
              if (not np.isnan(x.numpy()).any()) and 
              (not np.isinf(x.numpy()).any())]
+        
         temp = min(len(log_var), len(mu))
         log_var = log_var[:temp]
         mu = mu[:temp]
 
+        return mu, log_var
+
+
+    def make_final_mu_log_var_graphs(self):
+    
+
+        mu, log_var = self.get_mu_log_var_results()
         graph_list = [(mu[-1], 'mu.png'), (log_var[-1], 'log_var.png')]
+        
         for data, graph_name in graph_list:
             plot_data = np.sort(data.numpy())
             fig, ax = plt.subplots()
@@ -268,19 +337,7 @@ class AnalyzeResults():
 
     def make_mu_log_var_movie(self, log_var_graph=True):
 
-        with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
-            mu, log_var = pickle.load(f)
-
-        # Remove nan and inf values
-        log_var =[x for x in log_var 
-                  if (not np.isnan(x.numpy()).any()) and 
-                  (not np.isinf(x.numpy()).any())]
-        mu =[x for x in mu 
-             if (not np.isnan(x.numpy()).any()) and 
-             (not np.isinf(x.numpy()).any())]
-        temp = min(len(log_var), len(mu))
-        log_var = log_var[:temp]
-        mu = mu[:temp]
+        mu, log_var = self.get_mu_log_var_results()
         
         if log_var_graph:
             data = log_var
@@ -372,7 +429,7 @@ class AnalyzeResults():
 
             # create a scatter plot with colors indicating temporal order
             ax.scatter(r_pts, k_pts, s=1,
-                        c=colors, cmap='winter')
+                        c=colors, cmap='cool')
             ax.set_xlabel('Recon Loss')
             ax.set_ylabel('KL Loss')
             ax.set_xlim([min_x, max_x])
