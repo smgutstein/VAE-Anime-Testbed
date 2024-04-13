@@ -1,6 +1,7 @@
 import configparser
 import contextlib
 import cProfile
+import math
 import subprocess as sp
 import time
 
@@ -93,3 +94,13 @@ class delta_generator():
             return base_function(x, y)
         return custom_function
     
+def find_nan_or_inf_index(lst):
+    # Returns value of first NaN or inf in a list, so list can be truncated threre
+    # If non nan or inf, list doesn't need truncation, so list length is returned
+    try:
+        # Find the index of the first element that satisfies the condition
+        index = next(i for i, value in enumerate(lst) if math.isnan(value) or math.isinf(value))
+        return index
+    except StopIteration:
+        # If no NaN or inf is found, raise an IndexError or return None
+        return len(lst)
