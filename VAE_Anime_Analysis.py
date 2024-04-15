@@ -89,6 +89,7 @@ class AnalyzeResults():
         recon_loss_list=[]
         kl_loss_list=[]
         adj_kl_factor_list=[]
+  
         try:
             with open(self.stats_dir / Path('loss_lists.pkl'),'rb') as f:
                 while True:
@@ -235,8 +236,12 @@ class AnalyzeResults():
         kl_pts = []
         for curr_line in fl[1:]:
             data = [x.strip() for x in curr_line.split('--')]
-            recon_pts.append(float(data[2]))
-            kl_pts.append(float(data[3]))
+            if len(data) >= 4:
+                recon_pts.append(float(data[2]))
+                kl_pts.append(float(data[3]))
+            else:
+                print(f"Last line of losses_file incomplete: {data}")
+                break
 
         fig, ax = plt.subplots()
 
@@ -393,9 +398,13 @@ class AnalyzeResults():
         kl_pts = []
         for curr_line in fl[1:]:  # Skipping the header
             data = [x.strip() for x in curr_line.split('--')]
-            recon_pts.append(float(data[2]))
-            kl_pts.append(float(data[3]))
-
+            if len(data) >= 4:
+                recon_pts.append(float(data[2]))
+                kl_pts.append(float(data[3]))
+            else:
+                print(f"Last line of losses_file incomplete: {data}")
+                break
+ 
         skip_pts = int(.05*len(recon_pts))   
         recon_pts = recon_pts[skip_pts:]
         kl_pts = kl_pts[skip_pts:]
