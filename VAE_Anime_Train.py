@@ -10,6 +10,7 @@ import tensorflow_datasets as tfds
 from collections import defaultdict
 from collections import deque
 from datetime import timedelta
+from memory_profiler import profile
 from pathlib import Path
 from time import time, ctime
 
@@ -210,7 +211,9 @@ class VAE_Trainer:
         file_name = f"image_at_epoch_{epoch:04d}_step{step:04d}.png"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         plt.savefig(self.raw_image_dir / Path(file_name))
+        plt.close()
 
+    @profile
     def train_loop(self, running_window=20):
         '''Train the VAE model on the anime faces(for now) dataset'''
 
@@ -233,11 +236,23 @@ class VAE_Trainer:
         mu_list2=[]
         log_var_list2=[]
 
-        with open(self.stats_dir / Path("losses_file.txt"), 'w') as loss_file:
+        with (open(self.stats_dir / Path("losses_file.txt"), 'w') as loss_file,
+              open(self.stats_dir / Path("loss_lists.pkl"), "wb") as f1,
+              open(self.stats_dir / Path("mu_log_var_lists.pkl"), "wb") as f2,
+              open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "wb") as f3):
+               
             loss_file.write(f"Epoch -- Step -- Recon Loss -- KL Loss     -- KL_Adj_Factor\n")
             for epoch in range(self.epochs):
                 print('Start of epoch %d at %s' % (epoch, ctime()))
-    
+                
+                #Flush Buffers
+                if (epoch+1) % 100 == 0:
+                    loss_file.flush()
+                    f1.flush()
+                    f2.flush()
+                    f3.flush()
+                    print("File Buffers Flushed ")    
+
                 # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):
 
@@ -255,6 +270,16 @@ class VAE_Trainer:
                         # Get Current Losses
                         curr_loss_recon = loss_recon.numpy()
                         curr_loss_kl = loss_kl.numpy()
+
+                        if np.isnan(curr_loss_recon) or np.isnan(curr_loss_kl):
+                                print("Nan in loss")
+                                #import pdb; pdb.set_trace()
+                                temp=0
+                        elif np.isinf(curr_loss_recon) or np.isinf(curr_loss_kl):
+                                print("Inf in loss")
+                                #import pdb; pdb.set_trace()
+                                temp=0
+
 
                         # Scale losses
                         if (curr_loss_recon >= prev_loss_recon):
@@ -330,7 +355,7 @@ class VAE_Trainer:
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
 
-                    # Track means and variances of mu and log_var
+                    # Track means of mu and log_var
                     mu_list.append(tf.reduce_mean(mu,0))
                     log_var_list.append(tf.reduce_mean(log_var,0))
 
@@ -345,12 +370,21 @@ class VAE_Trainer:
 
 
                     if step % 10 == 0:
-                        with open(self.stats_dir / Path("loss_lists.pkl"), "wb") as f:
-                            pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list],f)
-                        with open(self.stats_dir / Path("mu_log_var_lists.pkl"), "wb") as f:
-                            pickle.dump([mu_list, log_var_list],f)
-                        with open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "wb") as f:
-                            pickle.dump([mu_list2, log_var_list2],f)
+                        #with open(self.stats_dir / Path("loss_lists.pkl"), "ab") as f:
+                        pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list],f1)
+                        #with open(self.stats_dir / Path("mu_log_var_lists.pkl"), "ab") as f:
+                        pickle.dump([mu_list, log_var_list],f2)
+                        #with open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "ab") as f:
+                        pickle.dump([mu_list2, log_var_list2],f3)
+
+                        recon_loss_list = []
+                        kl_loss_list = []
+                        adj_kl_factor_list = []
+                        mu_list = []
+                        log_var_list = []
+                        mu_list2 = []
+                        log_var_list2 = []
+
 
 
                     curr_time = time()
