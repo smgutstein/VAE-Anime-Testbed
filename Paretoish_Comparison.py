@@ -15,8 +15,13 @@ def get_datapts(expt_file):
     kl_pts = []
     for curr_line in fl[1:]:
         data = [x.strip() for x in curr_line.split('--')]
-        recon_pts.append(float(data[2]))
-        kl_pts.append(float(data[3]))
+        if len(data) >= 4:
+            recon_pts.append(float(data[2]))
+            kl_pts.append(float(data[3]))
+        else:
+            print(f"Last line of losses_file incomplete: {data}")
+            break
+ 
 
     return recon_pts, kl_pts
 
