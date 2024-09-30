@@ -10,7 +10,7 @@ import tensorflow_datasets as tfds
 from collections import defaultdict
 from collections import deque
 from datetime import timedelta
-from memory_profiler import profile
+#from memory_profiler import profile
 from pathlib import Path
 from time import time, ctime
 
@@ -213,7 +213,7 @@ class VAE_Trainer:
         plt.savefig(self.raw_image_dir / Path(file_name))
         plt.close()
 
-    @profile
+    #@profile
     def train_loop(self, running_window=20):
         '''Train the VAE model on the anime faces(for now) dataset'''
 
