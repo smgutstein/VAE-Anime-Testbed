@@ -47,7 +47,10 @@ class VAE_Model():
         if self.encoder is None or self.encoder.encoder_net is None:
             print("The encoder must be initialized first.")
             return
-        enc_output_shape = self.encoder.encoder_net.get_layer('last_batch_normalization').input_shape
+        
+        # The input shape of the encoder's encoder_flatten layer is 
+        # the shape the decoder needs to recover from flattened data
+        enc_output_shape = self.encoder.encoder_net.get_layer('encoder_flatten').input_shape
         self.decoder = VAE_Decoder(enc_output_shape, self.latent_dim, self.output_dir)
         self.decoder.set_decoder_model()
 

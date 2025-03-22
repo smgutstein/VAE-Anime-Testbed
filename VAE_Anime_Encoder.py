@@ -70,16 +70,15 @@ class VAE_Encoder:
                                 kernel_size=self.k_size, strides=2, 
                                 padding='same', 
                                 activation='relu', name="encoder_conv3")(x)
-
-        # assign to a different variable so you can extract the shape later
-        x = tf.keras.layers.BatchNormalization(name="last_batch_normalization")(x)
+        x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.LeakyReLU(name="lrelu_3")(x)
 
-        # flatten the features and feed into the Dense network
+        # Flatten the features and feed into the Dense network
+        # to get the mu and log_var. Important to note that the
+        # Flatten layer is named 'encoder_flatten' for easy access
+        # to the layer's input shape by the decoder.
         x = tf.keras.layers.Flatten(name="encoder_flatten")(x)
 
-        # we arbitrarily used 20 units here but feel free to change and 
-        # see what results you get
         x = tf.keras.layers.Dense(self.encode_dense_units, 
                                   activation='relu', 
                                   name="encoder_dense")(x)
@@ -91,7 +90,6 @@ class VAE_Encoder:
         mu = tf.keras.layers.Dense(self.latent_dim, name='latent_mu')(x)
         log_var = tf.keras.layers.Dense(self.latent_dim, name ='latent_log_var')(x)  
 
-        # revise `batch_3.shape` here if you opted not to use 3 Conv2D layers
         return mu, log_var
     
     def set_encoder_model(self):
@@ -119,7 +117,6 @@ class VAE_Encoder:
            with open(self.output_dir / Path('encoder_model_summary.txt'), 'w') as f:
                 # Redirect stdout to the file
                 with redirect_stdout(f):
-                    # Call model.summary(), which will now print to the file
                     self.encoder_net.summary()
                     print("Model summary has been saved to 'model_summary.txt'")   
         else:
@@ -132,5 +129,5 @@ if __name__ == '__main__':
                           latent_dim=512)
     encoder.set_encoder_model()
     encoder.show_model()
-    enc_output_shape = encoder.encoder_net.get_layer('last_batch_normalization').input_shape
+    enc_output_shape = encoder.encoder_net.get_layer('lrelu_3').input_shape
     print(f"Output shape of the encoder: {enc_output_shape}")

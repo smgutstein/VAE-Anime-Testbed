@@ -215,6 +215,7 @@ class AnalyzeResults():
         # Plot kl loss  
         axes[1][1].set_xlabel('Iteration')
         axes[1][1].set_ylabel('KL Loss')
+        axes[1][1].set_yscale('log')
         axes[1][1].yaxis.tick_right()
         axes[1][1].yaxis.set_label_position("right")
         axes[1][1].plot(range(num_pts), kl_loss_list,
