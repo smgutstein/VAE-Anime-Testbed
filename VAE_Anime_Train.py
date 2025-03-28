@@ -24,6 +24,7 @@ from utils import is_config_file
 from utils import read_config_file
 from utils import sign
 
+
 class VAE_Trainer:
     '''Class to train the VAE model on the anime faces dataset'''
 
@@ -221,204 +222,178 @@ class VAE_Trainer:
         plt.savefig(self.raw_image_dir / Path(file_name))
         plt.close()
 
-    #@profile
-    def train_loop(self, running_window=20):
-        '''Train the VAE model on the anime faces(for now) dataset'''
+    
+    @staticmethod
+    @tf.function(reduce_retracing=True)
+    def train_step(x_batch_train, kl_adj_tensor, vae_obj, loss_fn, optimizer):
+        model = vae_obj.vae_net
+        
+        with tf.GradientTape() as tape:
+            reconstructed, mu, log_var = model(x_batch_train)
+            loss_recon = loss_fn(x_batch_train, reconstructed) * vae_obj.encoder.num_input_pixels
+            loss_kl = model.losses[0]
+            loss_tot = loss_recon + kl_adj_tensor * loss_kl
 
-        # Set Timing Parameters
+        grads = tape.gradient(loss_tot, model.trainable_weights)
+        optimizer.apply_gradients(zip(grads, model.trainable_weights))
+        return loss_recon, loss_kl, mu, log_var, grads
+
+
+
+    ###########################################################
+    def train_loop(self, running_window=20):
         start_time = time()
         print("Start Time: ", ctime())
-        #Temp variable to see if I really do adjust the update factor
-        adj_ctr = [(0,0, self.kl_adj_update_factor)] 
+        adj_ctr = [(0, 0, self.kl_adj_update_factor)]
 
-        # Initialize performance trackers
         prev_loss_recon = np.inf
         prev_loss_kl = np.inf
 
-        # Lists of values for later plottting & diagnostics
         recon_loss_list = []
         kl_loss_list = []
         adj_kl_factor_list = []
         grad_list = []
-        mu_list=[]
-        log_var_list=[]
-        mu_list2=[]
-        log_var_list2=[]
+        mu_list = []
+        log_var_list = []
+        mu_list2 = []
+        log_var_list2 = []
 
-        with (open(self.stats_dir / Path("losses_file.txt"), 'w') as loss_file,
-              open(self.stats_dir / Path("loss_lists.pkl"), "wb") as f1,
-              open(self.stats_dir / Path("mu_log_var_lists.pkl"), "wb") as f2,
-              open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "wb") as f3):
-               
+        with (
+            open(self.stats_dir / Path("losses_file.txt"), 'w') as loss_file,
+            open(self.stats_dir / Path("loss_lists.pkl"), "wb") as f1,
+            open(self.stats_dir / Path("mu_log_var_lists.pkl"), "wb") as f2,
+            open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "wb") as f3
+        ):
             loss_file.write(f"Epoch -- Step -- Recon Loss -- KL Loss     -- KL_Adj_Factor\n")
+
             for epoch in range(self.epochs):
                 print('Start of epoch %d at %s' % (epoch, ctime()))
-                
-                #Flush Buffers
-                if (epoch+1) % 100 == 0:
+
+                if (epoch + 1) % 100 == 0:
                     loss_file.flush()
                     f1.flush()
                     f2.flush()
                     f3.flush()
-                    print("File Buffers Flushed ")    
+                    print("File Buffers Flushed ")
 
-                # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):
+                    # Convert kl_adj_factor to tensor for tf.function
+                    kl_adj_tensor = tf.constant(self.kl_adj_factor, dtype=tf.float32)
 
-                    with tf.GradientTape() as tape:
-                        # feed a batch to the VAE model
-                        reconstructed, mu, log_var = self.vae.vae_net(x_batch_train)
+                    # Call static train_step
+                    loss_recon, loss_kl, mu, log_var, grads = self.train_step(
+                        x_batch_train,
+                        kl_adj_tensor,
+                        self.vae,  # <-- pass the full wrapper with `.vae_net` and `.encoder`
+                        self.mse_loss,
+                        self.optimizer
+)
 
-                        # compute reconstruction loss
-                        loss_recon = self.mse_loss(x_batch_train, reconstructed) * \
-                                     self.vae.encoder.num_input_pixels 
+                    curr_loss_recon = loss_recon.numpy()
+                    curr_loss_kl = loss_kl.numpy()
 
-                        # get KLD regularization loss 
-                        loss_kl = self.vae.vae_net.losses[0]
+                    if np.isnan(curr_loss_recon) or np.isnan(curr_loss_kl):
+                        print("Nan in loss")
+                    elif np.isinf(curr_loss_recon) or np.isinf(curr_loss_kl):
+                        print("Inf in loss")
 
-                        # Get Current Losses
-                        curr_loss_recon = loss_recon.numpy()
-                        curr_loss_kl = loss_kl.numpy()
+                    # KL balancing
+                    if curr_loss_recon >= prev_loss_recon:
+                        self.kl_adj_factor = self.dec(self.kl_adj_factor)
+                        adj_str = "-"
+                    else:
+                        self.kl_adj_factor = self.inc(self.kl_adj_factor)
+                        adj_str = "+"
 
-                        if np.isnan(curr_loss_recon) or np.isnan(curr_loss_kl):
-                                print("Nan in loss")
-                                #import pdb; pdb.set_trace()
-                                temp=0
-                        elif np.isinf(curr_loss_recon) or np.isinf(curr_loss_kl):
-                                print("Inf in loss")
-                                #import pdb; pdb.set_trace()
-                                temp=0
+                    self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
 
+                    self.kl_adj_factor_queue.append(self.kl_adj_factor)
+                    if len(self.kl_adj_factor_queue) >= 2:
+                        delta = sign(self.kl_adj_factor_queue[-1] - self.kl_adj_factor_queue[-2])
+                        self.kl_adj_factor_delta_queue.append(delta)
 
-                        # Scale losses
-                        if (curr_loss_recon >= prev_loss_recon):
-                            # Recon loss is getting worse, decrease emphasis on KL Loss
-                            self.kl_adj_factor = self.dec(self.kl_adj_factor) #/= 2
-                            adj_str = "-"
-                        elif (curr_loss_recon < prev_loss_recon):
-                            # If recon loss improves, but kl didn't
-                            self.kl_adj_factor = self.inc(self.kl_adj_factor) #*= 2
-                            adj_str = "+"
-                        else:
-                            # Silly case that no longer occurs
-                            adj_str = "0"
+                    num_maxes = sum([1 for x in self.kl_adj_factor_queue if x == self.kl_adj_factor_max])
+                    test1 = num_maxes > 0.4 * len(self.kl_adj_factor_queue)
+                    test2 = num_maxes < 0.6 * len(self.kl_adj_factor_queue)
 
-                        # Cap KL Loss Factor - This is tragically arbitrary
-                        self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
-
-                        # Check if kl_adj_factor is bouncing too much at top of range
-                        # If so, decrease the update factor
+                    if test1 and test2:
+                        self.kl_adj_update_factor *= 0.9
+                        self.delta_gen = delta_generator(delt_mul, delt_div, self.kl_adj_update_factor)
+                        self.inc = self.delta_gen.inc_func
+                        self.dec = self.delta_gen.dec_func
+                        self.kl_adj_factor_queue.clear()
                         self.kl_adj_factor_queue.append(self.kl_adj_factor)
-                        if len(self.kl_adj_factor_queue) >= 2:
-                            delta = sign(self.kl_adj_factor_queue[-1] -
-                                         self.kl_adj_factor_queue[-2])
-                            self.kl_adj_factor_delta_queue.append(delta)
-                        num_ups = sum([1 for x in self.kl_adj_factor_delta_queue if x > 0]) 
-                        num_downs = sum([1 for x in self.kl_adj_factor_delta_queue if x < 0])  
+                        self.kl_adj_factor_delta_queue.clear()
+                        adj_ctr.append((epoch, step, self.kl_adj_update_factor))
 
-                        # # Check if we're bouncing too much at the top of the range
-                        num_maxes = sum([1 for x in self.kl_adj_factor_queue 
-                                        if x == self.kl_adj_factor_max])      
-                        test1 = num_maxes > .4*len(self.kl_adj_factor_queue)
-                        test2 = num_maxes < .6*len(self.kl_adj_factor_queue)
-                        
-                        if test1 and test2:
-                            self.kl_adj_update_factor *= 0.9
-                            self.delta_gen = delta_generator(delt_mul, delt_div, 
-                                                             self.kl_adj_update_factor)
-                            self.inc = self.delta_gen.inc_func 
-                            self.dec = self.delta_gen.dec_func
+                    prev_loss_recon = curr_loss_recon
+                    prev_loss_kl = curr_loss_kl
 
-                            self.kl_adj_factor_queue.clear()
-                            self.kl_adj_factor_queue.append(self.kl_adj_factor)
-                            self.kl_adj_factor_delta_queue.clear()
-                            adj_ctr.append((epoch,step, self.kl_adj_update_factor))
+                    # Logging
+                    tempx1 = max(self.kl_adj_factor_queue)
+                    tempn1 = min(self.kl_adj_factor_queue)
+                    loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4e} -- {self.kl_adj_factor:.4e}  ")
+                    loss_file.write(f"{test1} {test2} {num_maxes} ")
+                    loss_file.write(f"{tempx1} {tempn1} {len(self.kl_adj_factor_queue)}\n")
 
-                        prev_loss_recon = curr_loss_recon
-                        prev_loss_kl = curr_loss_kl
+                    # Logging + metrics
+                    if step % 10 == 0:
+                        self.snapshot_vae_behavior(epoch, step, curr_loss_recon, curr_loss_kl)
 
-                        # Calculate Total Effective Loss
-                        tempx1 = max(self.kl_adj_factor_queue)
-                        tempn1 = min(self.kl_adj_factor_queue)
-                        loss_file.write(f"{epoch}     --  {step}   --  {loss_recon:.4f}")
-                        loss_file.write(f"-- {loss_kl:.4e}  -- {self.kl_adj_factor:.4e}  ")
-                        loss_file.write(f"{test1} {test2} {num_ups} {num_downs} ")
-                        loss_file.write(f"{tempx1} {tempn1} {len(self.kl_adj_factor_queue)}  \n")
-                        loss_tot = loss_recon + self.kl_adj_factor*loss_kl
-                        
- 
-                    # Get gradient of tital effective loss w/resp to trainable params
-                    grads = tape.gradient(loss_tot, self.vae.vae_net.trainable_weights)
-                    self.optimizer.apply_gradients(zip(grads,
-                                                       self.vae.vae_net.trainable_weights))
-
-                    if step % 10 == 0:  
-                        self.snapshot_vae_behavior(epoch, step, 
-                                                    loss_recon.numpy(), 
-                                                    loss_kl.numpy())
- 
-                    recon_loss_list.append(loss_recon.numpy())
-                    kl_loss_list.append(loss_kl.numpy())
+                    recon_loss_list.append(curr_loss_recon)
+                    kl_loss_list.append(curr_loss_kl)
                     adj_kl_factor_list.append(self.kl_adj_factor)
 
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
 
-                    # Track means of mu and log_var
-                    mu_list.append(tf.reduce_mean(mu,0))
-                    log_var_list.append(tf.reduce_mean(log_var,0))
+                    mu_list.append(tf.reduce_mean(mu, 0))
+                    log_var_list.append(tf.reduce_mean(log_var, 0))
+                    mu_list2.append(tf.math.reduce_variance(mu, 0))
+                    log_var_list2.append(tf.math.reduce_variance(log_var, 0))
 
-                    # Track variances of mu and log_var
-                    mu_list2.append(tf.math.reduce_variance(mu,0))
-                    log_var_list2.append(tf.math.reduce_variance(log_var,0))
-
-                    # compute the loss metric
-                    # Remember: loss_metric_recon is a tf.keras.metrics.Mean()
                     self.loss_metric_recon(loss_recon)
                     self.loss_metric_kl(loss_kl)
 
-
                     if step % 10 == 0:
-                        #with open(self.stats_dir / Path("loss_lists.pkl"), "ab") as f:
-                        pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list],f1)
-                        #with open(self.stats_dir / Path("mu_log_var_lists.pkl"), "ab") as f:
-                        pickle.dump([mu_list, log_var_list],f2)
-                        #with open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "ab") as f:
-                        pickle.dump([mu_list2, log_var_list2],f3)
+                        pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list], f1)
+                        pickle.dump([mu_list, log_var_list], f2)
+                        pickle.dump([mu_list2, log_var_list2], f3)
 
-                        recon_loss_list = []
-                        kl_loss_list = []
-                        adj_kl_factor_list = []
-                        mu_list = []
-                        log_var_list = []
-                        mu_list2 = []
-                        log_var_list2 = []
-
-
+                        recon_loss_list.clear()
+                        kl_loss_list.clear()
+                        adj_kl_factor_list.clear()
+                        mu_list.clear()
+                        log_var_list.clear()
+                        mu_list2.clear()
+                        log_var_list2.clear()
 
                     curr_time = time()
-                    #step_delta_time = str(timedelta(seconds = curr_time - last_time))
-                    tot_delta_time = str(timedelta(seconds = curr_time - start_time))
-                    last_time = curr_time
-
+                    tot_delta_time = str(timedelta(seconds=curr_time - start_time))
                     out_str = f"Epoch: {epoch} step: {step} "
-                    out_str += f"recon loss = {loss_recon.numpy():.4f} "
-                    out_str += f"kl_loss = {loss_kl.numpy():.4e} "
-                    out_str += f" {adj_str} "
-                    out_str += f"kl_adj_factor = {self.kl_adj_factor:.4e} "
-                    out_str += f"tot run time = {str(tot_delta_time)}"
+                    out_str += f"recon loss = {curr_loss_recon:.4f} "
+                    out_str += f"kl_loss = {curr_loss_kl:.4e} "
+                    out_str += f"{adj_str} kl_adj_factor = {self.kl_adj_factor:.4e} "
+                    out_str += f"tot run time = {tot_delta_time}"
                     print(out_str)
-                    
-        print("End Time", ctime())
-        delta_time = str(timedelta(seconds = curr_time - start_time))
-        print("Running Time", delta_time)
-        if self.save_net:
-            print(f"Saving the model to {self.stats_dir / Path('anime.keras')}")
-            self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
-        else:
-            print("Model not saved")
-        print(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
-        print(adj_ctr)
+
+            print("End Time", ctime())
+            delta_time = str(timedelta(seconds=time() - start_time))
+            print("Running Time", delta_time)
+
+            if self.save_net:
+                print(f"Saving the model to {self.stats_dir / Path('anime.keras')}")
+                self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
+            else:
+                print("Model not saved")
+
+            print(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
+            print(adj_ctr)
+
+
+    #############################################################
+
+    
 
 if __name__ == "__main__":
 

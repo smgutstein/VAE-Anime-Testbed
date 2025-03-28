@@ -123,13 +123,17 @@ class Datasets():
         train_files = list(map(str, train_paths))
         training_dataset = tf.data.Dataset.from_tensor_slices(train_files)
         training_dataset = training_dataset.map(map_image)
-        training_dataset = training_dataset.shuffle(1000).batch(self.batch_size)
+        #training_dataset = training_dataset.shuffle(1000).batch(self.batch_size)
+        training_dataset = training_dataset.shuffle(1000).batch(self.batch_size, drop_remainder=True)
+
 
         # load the validation image paths into tensors and create batches
         val_files = list(map(str, val_paths))
         validation_dataset = tf.data.Dataset.from_tensor_slices(val_files)
         validation_dataset = validation_dataset.map(map_image)
-        validation_dataset = validation_dataset.batch(self.batch_size)
+        #validation_dataset = validation_dataset.batch(self.batch_size)
+        validation_dataset = validation_dataset.batch(self.batch_size, drop_remainder=True)
+
 
         # set the training and validation datasets and print the number of batches in each
         self.training_dataset = training_dataset
