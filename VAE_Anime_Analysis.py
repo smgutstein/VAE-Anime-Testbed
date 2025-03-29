@@ -1,5 +1,6 @@
 import argparse
 import imageio.v2 as imageio
+import logging
 import math
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,6 +14,8 @@ from tqdm import tqdm
 from utils import find_nan_or_inf_index
 from utils import is_config_file
 from utils import read_config_file
+from utils import setup_logging
+
 
 class AnalyzeResults():
     def __init__(self, config_file="config.ini", expt=-1):
@@ -34,7 +37,7 @@ class AnalyzeResults():
         if expt == -1:
             self.get_output_dir()
 
-        print(f"Making graphs of results in {self.output_dir}")
+        logging.info(f"Making graphs of results in {self.output_dir}")
         self.raw_image_dir = self.output_dir / "raw_images"
 
         self.stats_dir = self.output_dir / "stats" 
@@ -105,7 +108,7 @@ class AnalyzeResults():
                             adj_kl_factor_list += data[2]
                         else:
                             # Handle unexpected data types or structures
-                            print("Unexpected data:", data)
+                            logging.info("Unexpected data:", data)
                     
                     except EOFError:
                         # Reached end of file (no more objects to load)
@@ -113,12 +116,12 @@ class AnalyzeResults():
                     
                     except Exception as e:
                         # Handle other exceptions (e.g., pickle decode error)
-                        print("Error loading data:", e)
+                        logging.error("Error loading data:", e)
         except FileNotFoundError:
-            print("File not found:", self.stats_dir / Path('loss_lists.pkl'))
+            logging.critical("File not found:", self.stats_dir / Path('loss_lists.pkl'))
         
         except Exception as e:
-            print("Error:", e)
+            logging.error("Error:", e)
 
         # Remove nan and inf values
         recon_loss_list = [x for x in recon_loss_list 
@@ -241,7 +244,7 @@ class AnalyzeResults():
                 recon_pts.append(float(data[2]))
                 kl_pts.append(float(data[3]))
             else:
-                print(f"Last line of losses_file incomplete: {data}")
+                logging.warning(f"Last line of losses_file incomplete: {data}")
                 break
 
         fig, ax = plt.subplots()
@@ -266,7 +269,7 @@ class AnalyzeResults():
 
         # Save graph
         plt.savefig(self.stats_dir / Path('Paretoish.png'))   
-        print(f"Saved {self.stats_dir / Path('Paretoish.png')}")  
+        logging.info(f"Saved {self.stats_dir / Path('Paretoish.png')}")  
 
     def make_singleton_graphs(self):
         self.make_paretoish_graph()
@@ -291,7 +294,7 @@ class AnalyzeResults():
                             log_var += data[1]
                         else:
                             # Handle unexpected data types or structures
-                            print("Unexpected data:", data)
+                            logging.info("Unexpected data:", data)
                     
                     except EOFError:
                         # Reached end of file (no more objects to load)
@@ -299,13 +302,13 @@ class AnalyzeResults():
                     
                     except Exception as e:
                         # Handle other exceptions (e.g., pickle decode error)
-                        print("Error loading data:", e)  
+                        logging.error("Error loading data:", e)  
 
         except FileNotFoundError:
-            print("File not found:", self.stats_dir / Path('loss_lists.pkl'))
+            logging.critical("File not found:", self.stats_dir / Path('loss_lists.pkl'))
         
         except Exception as e:
-            print("Error:", e)
+            logging.error("Error:", e)
 
 
         # Remove nan and inf values
@@ -338,7 +341,7 @@ class AnalyzeResults():
             ax.scatter(range(len(data)), plot_data, s=3, color='cadetblue')
             ax.axhline(y=0, color='lightsteelblue')
             plt.savefig(self.stats_dir / Path(graph_name))
-            print(f" Saved {self.stats_dir / Path(graph_name)}")
+            logging.info(f" Saved {self.stats_dir / Path(graph_name)}")
     
 
     def make_mu_log_var_movie(self, log_var_graph=True):
@@ -384,7 +387,7 @@ class AnalyzeResults():
         
         # Close Writer
         writer.close()
-        print(f"Saved {self.movies_dir / graph_name}")
+        logging.info(f"Saved {self.movies_dir / graph_name}")
 
     def make_paretoish_movie(self):
 
@@ -403,7 +406,7 @@ class AnalyzeResults():
                 recon_pts.append(float(data[2]))
                 kl_pts.append(float(data[3]))
             else:
-                print(f"Last line of losses_file incomplete: {data}")
+                logging.warning(f"Last line of losses_file incomplete: {data}")
                 break
  
         skip_pts = int(.05*len(recon_pts))   
@@ -461,7 +464,7 @@ class AnalyzeResults():
             
         # Close the writer
         writer.close()   
-        print(f"Saved {self.movies_dir / 'paretoish.mp4'}")
+        logging.info(f"Saved {self.movies_dir / 'paretoish.mp4'}")
 
 
 if __name__ == "__main__":
@@ -473,7 +476,10 @@ if __name__ == "__main__":
                         help='Get mu & sigma graphs and movie')
     parser.add_argument('-e', '--expt', type=int, default=-1,
                         help='Get specified expt number. Default is last expt.')
+    parser.add_argument("--log", default="INFO", help="Logging level")
     args = parser.parse_args()
+
+    setup_logging(args.log)
     
     ar = AnalyzeResults(args.config_file, args.expt)
     ar.make_singleton_graphs()  
