@@ -227,11 +227,17 @@ class VAE_Trainer:
     @tf.function(reduce_retracing=True)
     def train_step(x_batch_train, kl_adj_tensor, vae_obj, loss_fn, optimizer):
         model = vae_obj.vae_net
-        
+
         with tf.GradientTape() as tape:
             reconstructed, mu, log_var = model(x_batch_train)
+
+            # compute reconstruction loss
             loss_recon = loss_fn(x_batch_train, reconstructed) * vae_obj.encoder.num_input_pixels
+
+            # get KLD regularization loss 
             loss_kl = model.losses[0]
+
+            # Compute weighted total loss
             loss_tot = loss_recon + kl_adj_tensor * loss_kl
 
         grads = tape.gradient(loss_tot, model.trainable_weights)
@@ -242,13 +248,19 @@ class VAE_Trainer:
 
     ###########################################################
     def train_loop(self, running_window=20):
+
+        # Set Timing Parameters
         start_time = time()
         print("Start Time: ", ctime())
+
+        # Temp variable to see if I really do adjust the update factor
         adj_ctr = [(0, 0, self.kl_adj_update_factor)]
 
+        # Initialize performance trackers
         prev_loss_recon = np.inf
         prev_loss_kl = np.inf
 
+        # Lists of values for later plottting & diagnostics
         recon_loss_list = []
         kl_loss_list = []
         adj_kl_factor_list = []
@@ -269,6 +281,7 @@ class VAE_Trainer:
             for epoch in range(self.epochs):
                 print('Start of epoch %d at %s' % (epoch, ctime()))
 
+                # Flush buffers
                 if (epoch + 1) % 100 == 0:
                     loss_file.flush()
                     f1.flush()
@@ -276,6 +289,7 @@ class VAE_Trainer:
                     f3.flush()
                     print("File Buffers Flushed ")
 
+                # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):
                     # Convert kl_adj_factor to tensor for tf.function
                     kl_adj_tensor = tf.constant(self.kl_adj_factor, dtype=tf.float32)
@@ -288,7 +302,7 @@ class VAE_Trainer:
                         self.mse_loss,
                         self.optimizer
 )
-
+                    # Get Current Losses
                     curr_loss_recon = loss_recon.numpy()
                     curr_loss_kl = loss_kl.numpy()
 
@@ -299,12 +313,15 @@ class VAE_Trainer:
 
                     # KL balancing
                     if curr_loss_recon >= prev_loss_recon:
+                        # Recon loss is getting worse, decrease emphasis on KL Loss
                         self.kl_adj_factor = self.dec(self.kl_adj_factor)
                         adj_str = "-"
                     else:
+                        # If recon loss improves, but kl didn't
                         self.kl_adj_factor = self.inc(self.kl_adj_factor)
                         adj_str = "+"
 
+                    # Cap KL Loss Factor - This is tragically arbitrary
                     self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
 
                     self.kl_adj_factor_queue.append(self.kl_adj_factor)
@@ -312,6 +329,8 @@ class VAE_Trainer:
                         delta = sign(self.kl_adj_factor_queue[-1] - self.kl_adj_factor_queue[-2])
                         self.kl_adj_factor_delta_queue.append(delta)
 
+                    # Check if kl_adj_factor is bouncing too much at top of range
+                    # If so, decrease the update factor
                     num_maxes = sum([1 for x in self.kl_adj_factor_queue if x == self.kl_adj_factor_max])
                     test1 = num_maxes > 0.4 * len(self.kl_adj_factor_queue)
                     test2 = num_maxes < 0.6 * len(self.kl_adj_factor_queue)
@@ -329,7 +348,7 @@ class VAE_Trainer:
                     prev_loss_recon = curr_loss_recon
                     prev_loss_kl = curr_loss_kl
 
-                    # Logging
+                    # Calculate Total Effective Loss
                     tempx1 = max(self.kl_adj_factor_queue)
                     tempn1 = min(self.kl_adj_factor_queue)
                     loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4e} -- {self.kl_adj_factor:.4e}  ")
@@ -347,8 +366,11 @@ class VAE_Trainer:
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
 
+                    # Track means of mu and log_var
                     mu_list.append(tf.reduce_mean(mu, 0))
                     log_var_list.append(tf.reduce_mean(log_var, 0))
+
+                    # Track variances of mu and log_var
                     mu_list2.append(tf.math.reduce_variance(mu, 0))
                     log_var_list2.append(tf.math.reduce_variance(log_var, 0))
 
