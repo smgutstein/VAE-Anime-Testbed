@@ -1,6 +1,7 @@
 import configparser
 import contextlib
 import cProfile
+import logging
 import math
 import subprocess as sp
 import time
@@ -104,3 +105,28 @@ def find_nan_or_inf_index(lst):
     except StopIteration:
         # If no NaN or inf is found, raise an IndexError or return None
         return len(lst)
+    
+def setup_logging(level="INFO"):
+    # Define accepted level aliases
+    aliases = {
+        "CRITICAL": logging.CRITICAL,
+        "FATAL": logging.CRITICAL,
+        "ERROR": logging.ERROR,
+        "WARNING": logging.WARNING,
+        "INFO": logging.INFO,
+        "DEBUG": logging.DEBUG,
+        "NOTSET": logging.NOTSET,
+    }
+
+    level_upper = level.upper()
+    numeric_level = aliases.get(level_upper)
+
+    if numeric_level is None:
+        print(f"Invalid log level: '{level}'")
+        print(f"Valid options: {', '.join(aliases.keys())}")
+        return  # Or fall back to a default: numeric_level = logging.INFO
+
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(asctime)s (%(levelname)s) : %(message)s"
+    )

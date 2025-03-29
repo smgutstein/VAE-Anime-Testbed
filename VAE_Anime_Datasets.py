@@ -1,4 +1,5 @@
 import argparse
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
@@ -6,6 +7,8 @@ import random
 import tensorflow as tf
 import urllib.request
 import zipfile
+
+from utils import setup_logging
 
 
 
@@ -139,8 +142,8 @@ class Datasets():
         self.training_dataset = training_dataset
         self.validation_dataset = validation_dataset
         self.datasets_made = True
-        print(f'number of batches in the training set: {len(training_dataset)}')
-        print(f'number of batches in the validation set: {len(validation_dataset)}')
+        logging.info(f'number of batches in the training set: {len(training_dataset)}')
+        logging.info(f'number of batches in the validation set: {len(validation_dataset)}')
 
     def display_train_data(self, size=9):
         self.display_sample_data("train", size)
@@ -163,7 +166,7 @@ class Datasets():
             dataset = self.validation_dataset
             data_samp_set = "Validation"
         else:
-            print("You must choose either the training or validation set with either a 't' or 'v' respectively.")
+            logging.error("You must choose either the training or validation set with either a 't' or 'v' respectively.")
             return
 
         # Get desired number of samples from the dataset
@@ -195,9 +198,9 @@ class Datasets():
             file_name = data_samp_set + "_sample.png"
             outfile = trgt_dir / file_name
             plt.savefig(outfile)
-            print(f"Sample image saved to {outfile}")
+            logging.info(f"Sample image saved to {outfile}")
         else:
-            print("No specified output directory. Images of sample data are not being saved")
+            logging.info("No specified output directory. Images of sample data are not being saved")
 
 
 if __name__ == '__main__':
@@ -205,7 +208,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description= 'Specify output directory')
     parser.add_argument('-o', '--output_dir', type=str, 
                         default='scratch_output', help='Output directory')
+    parser.add_argument("--log", default="INFO", help="Logging level")
     args = parser.parse_args()
+
+    setup_logging(args.log)
     
     data = Datasets(args.output_dir)
     data.set_data_params()

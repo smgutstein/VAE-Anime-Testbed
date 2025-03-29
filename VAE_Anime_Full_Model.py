@@ -1,10 +1,13 @@
 from contextlib import redirect_stdout
+import logging
 import tensorflow as tf
 
 from pathlib import Path
 
 from VAE_Anime_Encoder import VAE_Encoder
 from VAE_Anime_Decoder import VAE_Decoder
+from utils import setup_logging
+
 
 class KLDivergenceLossLayer(tf.keras.layers.Layer):
     '''Give the KL Divergence Loss as a layer in the model.'''
@@ -45,7 +48,7 @@ class VAE_Model():
     def init_decoder(self):
         # Create a new VAE_Decoder object and set the decoder model
         if self.encoder is None or self.encoder.encoder_net is None:
-            print("The encoder must be initialized first.")
+            logging.warning("The encoder must be initialized first.")
             return
         
         # The input shape of the encoder's encoder_flatten layer is 
@@ -88,15 +91,16 @@ class VAE_Model():
                 with redirect_stdout(f):
                     # Call model.summary(), which will now print to the file
                     self.vae_net.summary()
-                    print("Model summary has been saved to 'model_summary.txt'") 
+                    logging.info("Model summary has been saved to 'model_summary.txt'") 
                 self.encoder.show_model()
                 self.decoder.show_model()
         else:
-            print("Full VAE Model not yet defined")
+            logging.info("Full VAE Model not yet defined")
 
       
 
 if __name__ == '__main__':
+    setup_logging()
     VAE = VAE_Model()
     VAE.init_VAE()
     VAE.show_model()

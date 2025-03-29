@@ -1,4 +1,5 @@
 import argparse
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
@@ -22,6 +23,7 @@ from utils import delt_add, delt_sub, delt_mul, delt_div
 from utils import get_git_hash
 from utils import is_config_file
 from utils import read_config_file
+from utils import setup_logging
 from utils import sign
 
 
@@ -54,7 +56,7 @@ class VAE_Trainer:
         self.output_dir = parent_output_dir / f"expt_{num_expts+1}"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy(self.config_file, self.output_dir / Path("config.ini")) 
-        print(f"Storing Expt {num_expts+1} in {self.output_dir}")
+        logging.info(f"Storing Expt {num_expts+1} in {self.output_dir}")
 
 
         # Record the git hash used for this run, along with
@@ -127,8 +129,8 @@ class VAE_Trainer:
         elif temp == 'false' or temp == '0':
             self.save_net = False   
         else:
-            print("Invalid save_net value in config file. Expect True/False, true/false or 1/0")
-            print(f"Found {temp} in config file. Will assume value of true")
+            logging.warning("Invalid save_net value in config file. Expect True/False, true/false or 1/0")
+            logging.warning(f"Found {temp} in config file. Will assume value of true")
             self.save_net = True
 
 
@@ -251,7 +253,7 @@ class VAE_Trainer:
 
         # Set Timing Parameters
         start_time = time()
-        print("Start Time: ", ctime())
+        logging.info("Start Time: %s" % (ctime()))
 
         # Temp variable to see if I really do adjust the update factor
         adj_ctr = [(0, 0, self.kl_adj_update_factor)]
@@ -279,7 +281,7 @@ class VAE_Trainer:
             loss_file.write(f"Epoch -- Step -- Recon Loss -- KL Loss     -- KL_Adj_Factor\n")
 
             for epoch in range(self.epochs):
-                print('Start of epoch %d at %s' % (epoch, ctime()))
+                logging.info('Start of epoch %d at %s' % (epoch, ctime()))
 
                 # Flush buffers
                 if (epoch + 1) % 100 == 0:
@@ -287,7 +289,7 @@ class VAE_Trainer:
                     f1.flush()
                     f2.flush()
                     f3.flush()
-                    print("File Buffers Flushed ")
+                    logging.info("File Buffers Flushed ")
 
                 # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):
@@ -307,9 +309,9 @@ class VAE_Trainer:
                     curr_loss_kl = loss_kl.numpy()
 
                     if np.isnan(curr_loss_recon) or np.isnan(curr_loss_kl):
-                        print("Nan in loss")
+                        logging.error("Nan in loss")
                     elif np.isinf(curr_loss_recon) or np.isinf(curr_loss_kl):
-                        print("Inf in loss")
+                        logging.error("Inf in loss")
 
                     # KL balancing
                     if curr_loss_recon >= prev_loss_recon:
@@ -397,20 +399,20 @@ class VAE_Trainer:
                     out_str += f"kl_loss = {curr_loss_kl:.4e} "
                     out_str += f"{adj_str} kl_adj_factor = {self.kl_adj_factor:.4e} "
                     out_str += f"tot run time = {tot_delta_time}"
-                    print(out_str)
+                    logging.info(out_str)
 
-            print("End Time", ctime())
+            logging.info("End Time %s" % (ctime()))
             delta_time = str(timedelta(seconds=time() - start_time))
-            print("Running Time", delta_time)
+            logging.info("Running Time %s", (delta_time))
 
             if self.save_net:
-                print(f"Saving the model to {self.stats_dir / Path('anime.keras')}")
+                logging.info(f"Saving the model to {self.stats_dir / Path('anime.keras')}")
                 self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
             else:
-                print("Model not saved")
+                logging.info("Model not saved")
 
-            print(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
-            print(adj_ctr)
+            logging.info(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
+            logging.info(adj_ctr)
 
 
     #############################################################
@@ -422,11 +424,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
     parser.add_argument('-c', '--config_file', type=str, nargs='?',
                         default='config.ini', help='Config file')
+    parser.add_argument("--log", default="INFO", help="Logging level")
 
     args = parser.parse_args()
     if not is_config_file(args.config_file): 
-        print("Invalid config file")
+        logging.critical("Invalid config file")
         sys.exit(1) 
+
+    setup_logging(args.log)
 
     vae = VAE_Trainer(args.config_file)
     vae.vae.show_model()
@@ -435,7 +440,7 @@ if __name__ == "__main__":
     vae.snapshot_vae_behavior()
     vae.train_loop()
 
-    print("Starting to analyze results....")
+    logging.info("Starting to analyze results....")
     ar = AnalyzeResults(args.config_file)
     ar.make_singleton_graphs()
     ar.make_images_movie()

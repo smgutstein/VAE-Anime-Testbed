@@ -1,8 +1,11 @@
+import logging
 import numpy as np
 import tensorflow as tf
 
 from contextlib import redirect_stdout
 from pathlib import Path
+from utils import setup_logging
+
 
 
 class Sampling(tf.keras.layers.Layer):
@@ -118,16 +121,17 @@ class VAE_Encoder:
                 # Redirect stdout to the file
                 with redirect_stdout(f):
                     self.encoder_net.summary()
-                    print("Model summary has been saved to 'model_summary.txt'")   
+                    logging.info("Model summary has been saved to 'model_summary.txt'")   
         else:
-            print("Encoder Model not yet defined")
+            logging.error("Encoder Model not yet defined")
 
 
 if __name__ == '__main__':
     
+    setup_logging()
     encoder = VAE_Encoder(enc_input_shape=(64,64,3,), 
                           latent_dim=512)
     encoder.set_encoder_model()
     encoder.show_model()
     enc_output_shape = encoder.encoder_net.get_layer('lrelu_3').input_shape
-    print(f"Output shape of the encoder: {enc_output_shape}")
+    logging.info(f"Output shape of the encoder: {enc_output_shape}")

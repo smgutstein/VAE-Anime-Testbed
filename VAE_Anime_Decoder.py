@@ -1,7 +1,10 @@
+import logging
 import tensorflow as tf
 
 from contextlib import redirect_stdout
-from pathlib import Path    
+from pathlib import Path 
+from utils import setup_logging
+
 
 class VAE_Decoder:
     def __init__(self, 
@@ -92,11 +95,12 @@ class VAE_Decoder:
                 with redirect_stdout(f):
                     # Call model.summary(), which will now print to the file
                     self.decoder_net.summary()
-                    print("Model summary has been saved to 'model_summary.txt'")   
+                    logging.info("Model summary has been saved to 'model_summary.txt'")   
         else:
-            print("Decoder Model not yet defined")
+            logging.error("Decoder Model not yet defined")
 if __name__ == '__main__':
     
+    setup_logging()
     decoder = VAE_Decoder(dec_input_shape=(None, 8, 8, 128), 
                           latent_dim=512)
     decoder.set_decoder_model()
