@@ -16,6 +16,8 @@ from utils import is_config_file
 from utils import read_config_file
 from utils import setup_logging
 
+from VAE_ParetoFront import ParetoFront
+
 
 class AnalyzeResults():
     def __init__(self, config_file="config.ini", expt=-1):
@@ -32,6 +34,8 @@ class AnalyzeResults():
         assert is_config_file(config_file), f"{config_file} is invalid config file"
         
         self.config_file = config_file
+
+        self.pareto_front = ParetoFront()
 
         # Get directories with results of latest expt
         if expt == -1:
@@ -325,10 +329,8 @@ class AnalyzeResults():
 
         return mu, log_var
 
-
     def make_final_mu_log_var_graphs(self):
     
-
         mu, log_var = self.get_mu_log_var_results()
         graph_list = [(mu[-1], 'mu.png'), (log_var[-1], 'log_var.png')]
         
@@ -343,6 +345,28 @@ class AnalyzeResults():
             plt.savefig(self.stats_dir / Path(graph_name))
             logging.info(f" Saved {self.stats_dir / Path(graph_name)}")
     
+    def make_pareto_curve_graph(self):
+        recon_loss_list, kl_loss_list, _ = self.get_recon_kl_results()
+        self.pareto_front.add_points(recon_loss_list, kl_loss_list)
+        pareto_curve = self.pareto_front.get_smooth_pareto_curve()
+
+        fig, ax = plt.subplots()
+        ax.set_xlabel('Recon Loss')
+        ax.set_ylabel('KL Loss')
+        ax.set_title('Pareto Curve')
+
+        # Plot Pareto curve (line + points)
+        ax.plot(pareto_curve[:, 0], pareto_curve[:, 1], 
+                color='dodgerblue', label='Smoothed Pareto', linewidth=2)
+        ax.scatter(pareto_curve[:, 0], pareto_curve[:, 1], 
+                   color='darkslategray', s=10)  # show curve points
+        
+        outpath = self.stats_dir / "ParetoCurve.png"
+        plt.savefig(outpath)
+        logging.info(f" Saved {str(outpath)}")
+ 
+
+
 
     def make_mu_log_var_movie(self, log_var_graph=True):
 

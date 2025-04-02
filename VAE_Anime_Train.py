@@ -52,8 +52,9 @@ class VAE_Trainer:
         num_expts = max([int(d.name.split('_')[1]) 
                          for d in parent_output_dir.iterdir()
                          if d.is_dir() and 'expt_' in d.name])
-        
-        self.output_dir = parent_output_dir / f"expt_{num_expts+1}"
+        self.curr_expt = num_expts+1
+
+        self.output_dir = parent_output_dir / f"expt_{self.curr_expt}"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy(self.config_file, self.output_dir / Path("config.ini")) 
         logging.info(f"Storing Expt {num_expts+1} in {self.output_dir}")
@@ -441,9 +442,10 @@ if __name__ == "__main__":
     vae.train_loop()
 
     logging.info("Starting to analyze results....")
-    ar = AnalyzeResults(args.config_file)
+    ar = AnalyzeResults(args.config_file, vae.curr_expt)
     ar.make_singleton_graphs()
     ar.make_images_movie()
+    ar.make_pareto_curve_graph()
     ar.make_paretoish_movie()
     ar.make_mu_log_var_movie(log_var_graph=True)
     ar.make_mu_log_var_movie(log_var_graph=False)
