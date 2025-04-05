@@ -2,9 +2,6 @@ import bisect
 import logging
 import numpy as np
 
-from itertools import islice
-from scipy.interpolate import splprep, splev
-
 
 class ParetoFront:
     def __init__(self):

@@ -2,6 +2,8 @@ import argparse
 import matplotlib.pyplot as plt
 
 from pathlib import Path
+
+from VAE_ParetoFront import ParetoFront
 from utils import is_config_file
 from utils import read_config_file
 
@@ -69,6 +71,49 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
     plt.close()
     print(f"Saved {output_dir / Path(f'Paretoish_{expt1_num}_{expt2_num}.png')}")
 
+def compare_pareto_curves(expt1_num, recon_pts1, kl_pts1, 
+                          expt2_num, recon_pts2, kl_pts2,
+                          output_dir):
+    p1 = ParetoFront()
+    p2 = ParetoFront()
+
+    # Early points are noisy, so skip 1st 10% of the points
+    skip_pts1 = int(.10*len(recon_pts1))
+    skip_pts2 = int(.10*len(recon_pts2))
+
+
+    p1.add_points(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:])
+    p2.add_points(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:])
+
+    pareto_curve1 = p1.get_smooth_pareto_curve()
+    pareto_curve2 = p2.get_smooth_pareto_curve()
+
+    fig, ax = plt.subplots()
+
+    ax.plot(pareto_curve1[:, 0], pareto_curve1[:, 1], 
+            color='dodgerblue', label=f'Expt {expt1_num}', linewidth=2)
+    ax.scatter(pareto_curve1[:, 0], pareto_curve1[:, 1], 
+                   color='darkslategray', s=10)  # show curve points
+    
+    ax.plot(pareto_curve2[:, 0], pareto_curve2[:, 1], 
+            color='lightcoral', label=f'Expt {expt2_num}', linewidth=2)
+    ax.scatter(pareto_curve2[:, 0], pareto_curve2[:, 1], 
+                   color='maroon', s=10)  # show curve points
+    
+    ax.set_xlabel('Recon Loss')
+    ax.set_ylabel('KL Loss')
+    ax.set_yscale('log')
+    ax.set_title('Pareto Curves')
+    ax.legend()
+
+    plt.savefig(output_dir / Path(f'ParetoCurves_{expt1_num}_{expt2_num}.png'))
+    plt.close()
+    print(f"Saved {output_dir / Path(f'ParetoCurves_{expt1_num}_{expt2_num}.png')}")
+
+
+ 
+
+
 if __name__ == "__main__":
     '''Compare the pareto-ish graphs of two experiments.'''
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
@@ -110,3 +155,6 @@ if __name__ == "__main__":
                    e2, recon_pts2, kl_pts2,
                    output_dir)
 
+    compare_pareto_curves(e1, recon_pts1, kl_pts1, 
+                          e2, recon_pts2, kl_pts2,
+                          output_dir)
