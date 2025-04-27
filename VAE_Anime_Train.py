@@ -303,17 +303,21 @@ class VAE_Trainer:
                         kl_adj_tensor,
                         self.vae,  # <-- pass the full wrapper with `.vae_net` and `.encoder`
                         self.mse_loss,
-                        self.optimizer
-)
+                        self.optimizer)
+                    
                     # Get Current Losses
                     curr_loss_recon = loss_recon.numpy()
                     curr_loss_kl = loss_kl.numpy()
 
                     if np.isnan(curr_loss_recon) or np.isnan(curr_loss_kl):
                         logging.error("Nan in loss")
+                        import pdb
+                        pdb.set_trace()
                     elif np.isinf(curr_loss_recon) or np.isinf(curr_loss_kl):
                         logging.error("Inf in loss")
-
+                        import pdb
+                        pdb.set_trace()
+ 
                     # KL balancing
                     if curr_loss_recon >= prev_loss_recon:
                         # Recon loss is getting worse, decrease emphasis on KL Loss

@@ -344,29 +344,6 @@ class AnalyzeResults():
             ax.axhline(y=0, color='lightsteelblue')
             plt.savefig(self.stats_dir / Path(graph_name))
             logging.info(f" Saved {self.stats_dir / Path(graph_name)}")
-    
-    def make_pareto_curve_graph(self):
-        recon_loss_list, kl_loss_list, _ = self.get_recon_kl_results()
-        self.pareto_front.add_points(recon_loss_list, kl_loss_list)
-        pareto_curve = self.pareto_front.get_smooth_pareto_curve()
-
-        fig, ax = plt.subplots()
-        ax.set_xlabel('Recon Loss')
-        ax.set_ylabel('KL Loss')
-        ax.set_title('Pareto Curve')
-
-        # Plot Pareto curve (line + points)
-        ax.plot(pareto_curve[:, 0], pareto_curve[:, 1], 
-                color='dodgerblue', label='Smoothed Pareto', linewidth=2)
-        ax.scatter(pareto_curve[:, 0], pareto_curve[:, 1], 
-                   color='darkslategray', s=10)  # show curve points
-        
-        outpath = self.stats_dir / "ParetoCurve.png"
-        plt.savefig(outpath)
-        logging.info(f" Saved {str(outpath)}")
- 
-
-
 
     def make_mu_log_var_movie(self, log_var_graph=True):
 
@@ -413,6 +390,36 @@ class AnalyzeResults():
         writer.close()
         logging.info(f"Saved {self.movies_dir / graph_name}")
 
+    def test_pareto_curve(self):
+        # Read file with recon and kl losses
+        with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
+            fl = f.readlines()
+
+        # Remove lines with nan or inf
+        fl =[x for x in fl if ('nan' not in x) and ('inf' not in x)]   
+
+        recon_pts = []
+        kl_pts = []
+        for curr_line in fl[1:]:  # Skipping the header
+            data = [x.strip() for x in curr_line.split('--')]
+            if len(data) >= 4:
+                recon_pts.append(float(data[2]))
+                kl_pts.append(float(data[3]))
+            else:
+                logging.warning(f"Last line of losses_file incomplete: {data}")
+                break
+ 
+        #skip_pts = 0#int(.05*len(recon_pts))   
+        #recon_pts = recon_pts[skip_pts:]
+        #kl_pts = kl_pts[skip_pts:]
+ 
+
+        self.pareto_front.clear_front()
+        self.pareto_front.add_points(recon_pts, kl_pts)
+        #self.pareto_curve = self.pareto_front.get_smooth_pareto_curve()
+        return recon_pts, kl_pts
+
+
     def make_paretoish_movie(self):
 
         # Read file with recon and kl losses
@@ -446,6 +453,11 @@ class AnalyzeResults():
         frame_delta = int(0.1 * frame_len)
         num_frames = int((num_points - frame_len)/frame_delta) + 1
 
+        self.pareto_front.clear_front()
+        self.pareto_front.add_points(recon_pts, kl_pts)
+        pareto_curve = self.pareto.get_front()#self.pareto_front.get_smooth_pareto_curve()
+
+
         for idx in tqdm(range(num_frames+1),
                         desc='Making movie for paretoish'):
 
@@ -467,6 +479,13 @@ class AnalyzeResults():
             # create a scatter plot with colors indicating temporal order
             ax.scatter(r_pts, k_pts, s=1,
                         c=colors, cmap='cool')
+            
+            # Plot Pareto curve (line + points)
+            ax.plot(pareto_curve[:, 0], pareto_curve[:, 1], 
+                    color='dodgerblue', label='Smoothed Pareto', linewidth=2)
+            ax.scatter(pareto_curve[:, 0], pareto_curve[:, 1], 
+                    color='darkslategray', s=10)  # show curve points
+            
             ax.set_xlabel('Recon Loss')
             ax.set_ylabel('KL Loss')
             ax.set_xlim([min_x, max_x])
@@ -488,7 +507,31 @@ class AnalyzeResults():
             
         # Close the writer
         writer.close()   
-        logging.info(f"Saved {self.movies_dir / 'paretoish.mp4'}")
+        
+    def make_pareto_curve_graph(self):
+        recon_loss_list, kl_loss_list, _ = self.get_recon_kl_results()
+        self.pareto_front.clear_front()
+        self.pareto_front.add_points(recon_loss_list, kl_loss_list)
+        pareto_curve = np.array(self.pareto_front.get_front())#np.array(self.pareto_front.get_smooth_pareto_curve())
+
+        fig, ax = plt.subplots()
+        ax.set_xlabel('Recon Loss')
+        ax.set_ylabel('KL Loss')
+        ax.set_title('Pareto Curve')
+        ax.set_yscale('log')
+
+        # Plot Pareto curve (line + points)
+        ax.plot(pareto_curve[:, 0], pareto_curve[:, 1], 
+                color='dodgerblue', label='Smoothed Pareto', linewidth=2)
+        ax.scatter(pareto_curve[:, 0], pareto_curve[:, 1], 
+                   color='darkslategray', s=10)  # show curve points
+        
+        outpath = self.stats_dir / "ParetoCurve.png"
+        plt.savefig(outpath)
+        logging.info(f" Saved {str(outpath)}")
+ 
+
+
 
 
 if __name__ == "__main__":
@@ -509,6 +552,7 @@ if __name__ == "__main__":
     ar.make_singleton_graphs()  
     ar.make_images_movie()
     ar.make_paretoish_movie()
+    ar.make_pareto_curve_graph()
     if args.stat_graphs:
         ar.make_mu_log_var_movie(log_var_graph=True)
         ar.make_mu_log_var_movie(log_var_graph=False)

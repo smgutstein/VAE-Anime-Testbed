@@ -21,6 +21,9 @@ class ParetoFront:
             #print("     Rejected: self.front[i-1][1] =",self.front[i-1][1], " <= ",y)
             return True
         return False
+    
+    def clear_front(self):
+        self.front = []
 
     def add_points(self, x_pts, y_pts):
 
@@ -49,19 +52,21 @@ class ParetoFront:
     def get_smooth_pareto_curve(self, num_iters=3):
 
             point_list = self.get_front()
-            pareto_curve = np.array(point_list)
+            pareto_curve = point_list # Was this => np.array(point_list) necessary
             
             for curr_iter in range(num_iters):
-                for ctr in range(1,pareto_curve.shape[0]-1):
-                    lft_pt = pareto_curve[ctr-1,:]
-                    center_pt = pareto_curve[ctr,:]
-                    rgt_pt = pareto_curve[ctr+1,:]
+                for ctr in range(1,len(pareto_curve)-1):#range(1,pareto_curve.shape[0]-1):
+
+                    lft_pt = pareto_curve[ctr-1]#pareto_curve[ctr-1,:]
+                    center_pt = pareto_curve[ctr]#pareto_curve[ctr,:]
+                    rgt_pt = pareto_curve[ctr+1]#pareto_curve[ctr+1,:]
                 
                     delta_yeq = (center_pt[0] - lft_pt[0])/(rgt_pt[0] - lft_pt[0]) * (rgt_pt[1] - lft_pt[1])
                     delta_y12 = (center_pt[1] - lft_pt[1])
                     
                     if delta_y12 < delta_yeq:
                         new_y = lft_pt[1] + delta_yeq
-                        pareto_curve[ctr,1] = new_y
+                        #pareto_curve[ctr,1] = new_y
+                        pareto_curve[ctr] = (pareto_curve[ctr][0], new_y)
 
             return pareto_curve
