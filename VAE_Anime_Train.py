@@ -158,7 +158,7 @@ class VAE_Trainer:
             output_samples = input_image
 
         # VAE's response to each member of test_dataset
-        vae_predicted, _, _ = self.vae.vae_net.predict(test_dataset)
+        vae_predicted, _, _ = self.vae.vae_net.predict(output_samples)
 
         # Construct indices of images to be displayed
         # 4 indices are the same for each call to this procedure
@@ -238,7 +238,7 @@ class VAE_Trainer:
             loss_recon = loss_fn(x_batch_train, reconstructed) * vae_obj.encoder.num_input_pixels
 
             # get KLD regularization loss 
-            loss_kl = model.losses[0]
+            loss_kl = tf.reduce_mean(1 + log_var - tf.square(mu) - tf.exp(log_var)) * -0.5
 
             # Compute weighted total loss
             loss_tot = loss_recon + kl_adj_tensor * loss_kl

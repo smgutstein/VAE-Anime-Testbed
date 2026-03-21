@@ -81,7 +81,7 @@ class VAE_Decoder:
         Returns:
             model -- the decoder model
         """
-        inputs = tf.keras.layers.Input(shape=(self.latent_dim))
+        inputs = tf.keras.layers.Input(shape=(self.latent_dim,))
         outputs = self.decoder_layers(inputs)
         self.decoder_net = tf.keras.Model(inputs, outputs,
                                           name="Decoder_Model")

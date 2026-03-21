@@ -31,7 +31,6 @@ class VAE_Model():
         # Set the latent dimension and output directory
         self.latent_dim = latent_dim
         self.output_dir = Path(output_dir)
-        self.kl_loss_layer = KLDivergenceLossLayer()
 
         # Initialize the encoder, decoder, and VAE
         self.init_encoder()
@@ -53,7 +52,7 @@ class VAE_Model():
         
         # The input shape of the encoder's encoder_flatten layer is 
         # the shape the decoder needs to recover from flattened data
-        enc_output_shape = self.encoder.encoder_net.get_layer('encoder_flatten').input_shape
+        enc_output_shape = self.encoder.encoder_net.get_layer('encoder_flatten').input.shape
         self.decoder = VAE_Decoder(enc_output_shape, self.latent_dim, self.output_dir)
         self.decoder.set_decoder_model()
 
@@ -76,11 +75,6 @@ class VAE_Model():
                                       outputs=[reconstruction, mu, log_var],
                                       name="Full_VAE_Network")
 
-        # Compute the KL divergence loss using the loss layer
-        kl_loss = self.kl_loss_layer([mu, log_var])
-
-        # Add the KL loss to the model's losses
-        self.vae_net.add_loss(kl_loss)
 
 
     def show_model(self):

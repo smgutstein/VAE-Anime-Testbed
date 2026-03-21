@@ -449,13 +449,13 @@ class AnalyzeResults():
         num_points = len(fl[1:])
         min_x, max_x = np.percentile(np.array(recon_pts),[0,99.9])
         min_y, max_y = np.percentile(np.array(kl_pts),[0,99.9])
-        frame_len = int(0.05 * num_points)
-        frame_delta = int(0.1 * frame_len)
+        frame_len = max(1,int(0.05 * num_points))
+        frame_delta = max(1,int(0.1 * frame_len))
         num_frames = int((num_points - frame_len)/frame_delta) + 1
 
         self.pareto_front.clear_front()
         self.pareto_front.add_points(recon_pts, kl_pts)
-        pareto_curve = self.pareto.get_front()#self.pareto_front.get_smooth_pareto_curve()
+        pareto_curve = self.pareto_front.get_front()#self.pareto_front.get_smooth_pareto_curve()
 
 
         for idx in tqdm(range(num_frames+1),
@@ -481,9 +481,11 @@ class AnalyzeResults():
                         c=colors, cmap='cool')
             
             # Plot Pareto curve (line + points)
-            ax.plot(pareto_curve[:, 0], pareto_curve[:, 1], 
+            pareto_x = [x[0] for x in pareto_curve]
+            pareto_y = [y[1] for y in pareto_curve]
+            ax.plot(pareto_x, pareto_y, 
                     color='dodgerblue', label='Smoothed Pareto', linewidth=2)
-            ax.scatter(pareto_curve[:, 0], pareto_curve[:, 1], 
+            ax.scatter(pareto_x, pareto_y, 
                     color='darkslategray', s=10)  # show curve points
             
             ax.set_xlabel('Recon Loss')
