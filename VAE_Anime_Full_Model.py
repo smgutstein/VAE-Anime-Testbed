@@ -9,19 +9,6 @@ from VAE_Anime_Decoder import VAE_Decoder
 from utils import setup_logging
 
 
-class KLDivergenceLossLayer(tf.keras.layers.Layer):
-    '''Give the KL Divergence Loss as a layer in the model.'''
-    def __init__(self, **kwargs):
-        super(KLDivergenceLossLayer, self).__init__(**kwargs)
-
-    def call(self, inputs):
-        mu, log_var = inputs
-        kl_loss = 1 + log_var - tf.square(mu) - tf.exp(log_var)
-        kl_loss = tf.reduce_mean(kl_loss) * -0.5
-        self.add_loss(kl_loss)
-        return kl_loss
-
-
 class VAE_Model():
     '''Create a full VAE model with encoder, decoder, and VAE network.'''
     def __init__(self, enc_input_shape=(64,64,3,), 
@@ -52,16 +39,12 @@ class VAE_Model():
         
         # The input shape of the encoder's encoder_flatten layer is 
         # the shape the decoder needs to recover from flattened data
-        enc_output_shape = self.encoder.encoder_net.get_layer('encoder_flatten').input.shape
+        enc_output_shape = tuple(self.encoder.encoder_net.get_layer('encoder_flatten').input.shape)
         self.decoder = VAE_Decoder(enc_output_shape, self.latent_dim, self.output_dir)
         self.decoder.set_decoder_model()
 
     def init_VAE(self):
         # Initialize the VAE model
-        self.init_encoder()
-        self.init_decoder()
-
-        
         inputs = tf.keras.layers.Input(shape=self.enc_input_shape)
 
         # get mu, log_var, and z from the encoder output

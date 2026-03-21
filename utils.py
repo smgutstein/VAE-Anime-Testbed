@@ -79,7 +79,7 @@ def delt_mul(x,y):
 def delt_div(x,y):
     return x / y
     
-class delta_generator():
+class DeltaGenerator():
     '''Overly generalized function used to give more flexibility
        in how I would update the kl_adj_factor. The idea is to  
        have a function that can be customized to increase or

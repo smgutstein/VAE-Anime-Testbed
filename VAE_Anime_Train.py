@@ -6,9 +6,7 @@ import pickle
 import shutil
 import sys
 import tensorflow as tf
-import tensorflow_datasets as tfds
 
-from collections import defaultdict
 from collections import deque
 from datetime import timedelta
 #from memory_profiler import profile
@@ -18,8 +16,8 @@ from time import time, ctime
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_Full_Model import VAE_Model
 from VAE_Anime_Analysis import AnalyzeResults
-from utils import delta_generator
-from utils import delt_add, delt_sub, delt_mul, delt_div   
+from utils import DeltaGenerator
+from utils import delt_mul, delt_div   
 from utils import get_git_hash
 from utils import is_config_file
 from utils import read_config_file
@@ -89,10 +87,6 @@ class VAE_Trainer:
         self.data.set_data_params()
         self.data.download_data()
         self.data.make_train_and_validation_sets()
-        self.data.validation_dataset
-
-        # Initialize losses dictionary
-        self.param_hist_dict = defaultdict(list)    
 
         # Constant idxs of test images
         self.fixed_test_img_idxs = np.random.choice(64, size=4)
@@ -106,7 +100,7 @@ class VAE_Trainer:
         # Initialize Delta Generator 
         #   Creates increment & decrement functions 
         #   that multiply/divide by  1+self.kl_adj_update_factor
-        self.delta_gen = delta_generator(delt_mul, delt_div, self.kl_adj_update_factor)
+        self.delta_gen = DeltaGenerator(delt_mul, delt_div, self.kl_adj_update_factor)
         self.inc = self.delta_gen.inc_func 
         self.dec = self.delta_gen.dec_func
 
@@ -154,7 +148,7 @@ class VAE_Trainer:
         # to list of numpy arrays
         test_dataset = self.data.validation_dataset.take(1)
         output_samples = []
-        for input_image in tfds.as_numpy(test_dataset):
+        for input_image in test_dataset.as_numpy_iterator():
             output_samples = input_image
 
         # VAE's response to each member of test_dataset
@@ -344,7 +338,7 @@ class VAE_Trainer:
 
                     if test1 and test2:
                         self.kl_adj_update_factor *= 0.9
-                        self.delta_gen = delta_generator(delt_mul, delt_div, self.kl_adj_update_factor)
+                        self.delta_gen = DeltaGenerator(delt_mul, delt_div, self.kl_adj_update_factor)
                         self.inc = self.delta_gen.inc_func
                         self.dec = self.delta_gen.dec_func
                         self.kl_adj_factor_queue.clear()
