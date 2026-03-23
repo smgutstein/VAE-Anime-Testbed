@@ -55,10 +55,17 @@ class VAE_Trainer:
         parent_output_dir.mkdir(parents=True, exist_ok=True)
 
         # Create a new output directory for this experiment
-        num_expts = max([int(d.name.split('_')[1]) 
-                         for d in parent_output_dir.iterdir()
-                         if d.is_dir() and 'expt_' in d.name],
-                         default=0)
+        expt_nums = []
+        for d in parent_output_dir.iterdir():
+            if not d.is_dir() or not d.name.startswith("expt_"):
+                continue
+            suffix = d.name[5:]
+            if suffix.isdigit():
+                expt_nums.append(int(suffix))
+            else:
+                logging.warning(f"Skipping malformed experiment directory name: {d.name}")
+
+        num_expts = max(expt_nums, default=0)
         self.curr_expt = num_expts+1
 
         self.output_dir = parent_output_dir / f"expt_{self.curr_expt}"
@@ -100,7 +107,7 @@ class VAE_Trainer:
         self.data.make_train_and_validation_sets()
 
         # Constant idxs of test images
-        self.fixed_test_img_idxs = np.random.choice(64, size=4)
+        self.fixed_test_img_idxs = None
         self.fixed_gen_img_seeds = tf.random.normal(shape=[4, self.vae.latent_dim])
 
         # Training parameters
@@ -175,16 +182,32 @@ class VAE_Trainer:
         test_dataset = self.data.validation_dataset.take(1)
         output_samples = next(iter(test_dataset)).numpy()
 
+        batch_size = output_samples.shape[0]
+        if batch_size == 0:
+            raise RuntimeError("Validation batch is empty; cannot create VAE snapshot")
+
         # VAE's response to each member of test_dataset
         vae_predicted, _, _ = self.vae.vae_net.predict(output_samples)
 
         # Construct indices of images to be displayed
         # 4 indices are the same for each call to this procedure
         # 4 are rndly chosen each time
-        rnd_test_img_idxs = np.random.choice(64, size=4)
-        test_img_idxs = np.concatenate([self.fixed_test_img_idxs, 
-                                        rnd_test_img_idxs], axis=0)
-        
+        fixed_count = min(4, batch_size)
+        rnd_count   = min(4, batch_size)
+
+        # initialize fixed indices once
+        if self.fixed_test_img_idxs is None or len(self.fixed_test_img_idxs) != fixed_count:
+            self.fixed_test_img_idxs = np.random.choice(batch_size,
+                                                        size=fixed_count,
+                                                        replace=False)
+
+        # random indices each snapshot
+        rnd_test_img_idxs = np.random.choice(batch_size,
+                                             size=rnd_count,
+                                             replace=False)
+
+        test_img_idxs = np.concatenate([self.fixed_test_img_idxs,
+                                        rnd_test_img_idxs], axis=0)        
         # Construct 8 zero-vector seeds to show 'average' face
         # created by decoder
         zero_vector = tf.zeros(shape=[8, self.vae.latent_dim])
@@ -198,7 +221,7 @@ class VAE_Trainer:
                                    rnd_gen_img_seeds], axis=0)
         gen_images = self.vae.decoder.decoder_net.predict(gen_img_seeds)
         
-        num_idxs = 8
+        num_idxs = len(test_img_idxs)
         fig = plt.figure(figsize=(8,5))
         for ctr,idx in enumerate(test_img_idxs):
             # Display the input images
