@@ -3,9 +3,33 @@ import contextlib
 import cProfile
 import logging
 import math
+import numpy as np
+import os
+import random
 import subprocess as sp
+import tensorflow as tf
 import time
 
+def set_all_seeds(seed: int, deterministic: bool = False):
+    """Set Python, NumPy, and TensorFlow seeds.
+
+    Args:
+        seed: Integer seed value.
+        deterministic: If True, request more deterministic TF behavior.
+            This can reduce performance and is not guaranteed to make
+            every GPU op bitwise identical.
+    """
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.keras.utils.set_random_seed(seed)
+
+    if deterministic:
+        try:
+            tf.config.experimental.enable_op_determinism()
+        except Exception as e:
+            logging.warning(f"Could not enable TF op determinism: {e}")
 
 def read_config_file(filename):
     '''Reads a configuration file and returns a ConfigParser object.'''
@@ -28,12 +52,35 @@ def is_config_file(filename):
         return False
     
 def get_git_hash():
-    '''Returns the info needed to recreate experiment from git records.'''
-    branch_str = sp.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
-    hash_str =  sp.check_output(['git', 'log', '-n', '1']).decode("utf-8").strip()
-    diff_str = sp.check_output(['git', 'diff']).decode("utf-8").strip()
-    output_str = "Current Branch: " + branch_str + '\n\n' + hash_str + '\n\n' + diff_str
-    return output_str
+    '''Returns git info if available; otherwise returns a safe fallback string.'''
+
+    def run_git_cmd(cmd):
+        try:
+            return sp.check_output(cmd, stderr=sp.DEVNULL).decode("utf-8").strip()
+        except Exception:
+            return None
+
+    # Check if we're inside a git repo
+    inside_repo = run_git_cmd(['git', 'rev-parse', '--is-inside-work-tree'])
+
+    if inside_repo != 'true':
+        return "Git info unavailable (not a git repository)."
+
+    branch = run_git_cmd(['git', 'branch', '--show-current']) or "unknown"
+    commit = run_git_cmd(['git', 'log', '-n', '1']) or "unknown"
+    diff = run_git_cmd(['git', 'diff']) or ""
+
+    output = []
+    output.append(f"Current Branch: {branch}")
+    output.append("")
+    output.append(commit)
+
+    if diff:
+        output.append("")
+        output.append("Uncommitted changes:")
+        output.append(diff)
+
+    return "\n".join(output)
 
 def timing_decorator(func):
     def wrapper(*args, **kwargs):

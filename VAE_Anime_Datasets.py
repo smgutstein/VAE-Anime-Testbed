@@ -29,7 +29,7 @@ class Datasets():
 
     
     '''
-    def __init__(self, output_dir="scratch_output"):
+    def __init__(self, output_dir="scratch_output", seed=None):
         '''Initializes the class, creates the output directory, 
         using "scratch_output" as the default,     
         and sets flags indicating things to be done.'''
@@ -37,6 +37,7 @@ class Datasets():
         self.data_params_set = False
         self.data_downloaded = False
         self.datasets_made = False
+        self.seed = seed
         if isinstance(output_dir, str):
             self.output_dir = Path(output_dir)  
         elif isinstance(output_dir, Path):          
@@ -113,8 +114,12 @@ class Datasets():
         # get the list containing the image paths
         paths = get_dataset_slice_paths("/tmp/anime/images/")
 
-        # shuffle the paths
-        random.shuffle(paths)
+        # shuffle the paths reproducibly if a seed was supplied
+        if self.seed is None:
+            random.shuffle(paths)
+        else:
+            rng = random.Random(self.seed)
+            rng.shuffle(paths)
 
         # split the paths list into to training (80%) and validation sets(20%).
         paths_len = len(paths)
@@ -128,8 +133,10 @@ class Datasets():
         training_dataset = tf.data.Dataset.from_tensor_slices(train_files)
         training_dataset = training_dataset.map(map_image, 
                                                 num_parallel_calls=tf.data.AUTOTUNE)
-        training_dataset = training_dataset.shuffle(1000).batch(self.batch_size, 
-                                                                drop_remainder=True).prefetch(tf.data.AUTOTUNE)
+        training_dataset = training_dataset.shuffle(1000,seed=self.seed,
+                                                    reshuffle_each_iteration=True).batch(
+                                                    self.batch_size,
+                                                    drop_remainder=True).prefetch(tf.data.AUTOTUNE)
 
 
         # load the validation image paths into tensors and create batches
