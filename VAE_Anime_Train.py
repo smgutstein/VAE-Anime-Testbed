@@ -24,6 +24,7 @@ from utils import delt_mul, delt_div
 from utils import get_git_hash
 from utils import is_config_file
 from utils import read_config_file
+from utils import set_all_seeds
 from utils import setup_logging
 from utils import sign
 
@@ -44,6 +45,10 @@ class VAE_Trainer:
         # Load training params & output directories from config file
         self.config_file = config_file
         self.load_config_file()
+
+        # Make run randomness explicit and repeatable
+        set_all_seeds(self.seed, deterministic=self.deterministic)
+        logging.info(f"Using random seed {self.seed} (deterministic={self.deterministic})")
 
         # Set the output directories
         parent_output_dir = Path(self.parent_dir)
@@ -70,6 +75,8 @@ class VAE_Trainer:
             f.write("Git Hash: \n")
             f.write(hash_str)
             f.write("\n")   
+            f.write(f"Random Seed: {self.seed}\n")
+            f.write(f"Deterministic TF Ops: {self.deterministic}\n")
 
         # Set up the output directories
         self.raw_image_dir = self.output_dir / "raw_images"
@@ -87,7 +94,7 @@ class VAE_Trainer:
         self.vae = VAE_Model(output_dir=self.model_info_dir)
 
         # Initialize the Datasets class
-        self.data = Datasets(self.output_dir)
+        self.data = Datasets(self.output_dir, seed=self.seed)
         self.data.set_data_params()
         self.data.download_data()
         self.data.make_train_and_validation_sets()
@@ -122,6 +129,19 @@ class VAE_Trainer:
                                                      'kl_adj_update_factor'))
         self.running_window = int(config.get('Training_Parameters', 'running_window'))
         self.parent_dir = config.get('Output_Parameters', 'parent_dir')
+
+        # Reproducibility parameters are optional.
+        # Defaults make runs repeatable even when older config files omit them.
+        if config.has_section('Reproducibility') and config.has_option('Reproducibility', 'seed'):
+            self.seed = int(config.get('Reproducibility', 'seed'))
+        else:
+            self.seed = 1234
+
+        if config.has_section('Reproducibility') and config.has_option('Reproducibility', 'deterministic'):
+            temp = config.get('Reproducibility', 'deterministic').lower()
+            self.deterministic = temp in ('true', '1', 'yes', 'y', 'on')
+        else:
+            self.deterministic = False
 
         #Determine if the model should be saved
         temp = config.get('Output_Parameters', 'save_net').lower() 

@@ -21,23 +21,21 @@ from VAE_ParetoFront import ParetoFront
 class AnalyzeResults():
     def __init__(self, config_file="config.ini", expt=-1):
 
+        # Load the config file
+        assert Path(config_file).exists(), f"{config_file} does not exist"
+        assert is_config_file(config_file), f"{config_file} is invalid config file"
+        self.config_file = config_file
+        self.parent_dir = self.get_parent_dir()
+
         if expt != -1:
             # Get the output directory for the specified expt
-            assert Path(f'./expts/expt_{expt}').exists(), "Expt directory does not exist"
-            self.config_file = f'./expts/expt_{expt}/config.ini'
-            self.parent_dir = Path(f'./expts/')
             self.output_dir = Path(f'./expts/expt_{expt}')
+            assert self.output_dir.exists(), f"Expt directory does not exist: {self.output_dir}"
         else:
-            # Load the config file
-            assert Path(config_file).exists(), f"{config_file} does not exist"
-            assert is_config_file(config_file), f"{config_file} is invalid config file"
-            self.config_file = config_file
+            self.get_output_dir()
 
         self.pareto_front = ParetoFront()
 
-        # Get directories with results of latest expt
-        if expt == -1:
-            self.get_output_dir()
 
         logging.info(f"Making graphs of results in {self.output_dir}")
         self.raw_image_dir = self.output_dir / "raw_images"
@@ -54,14 +52,18 @@ class AnalyzeResults():
         self.movies_dir = self.output_dir / "movies"
         self.movies_dir.mkdir(parents=True, exist_ok=True)
 
-    def get_output_dir(self): 
+    def get_parent_dir(self):
         config = read_config_file(self.config_file)
-        self.parent_dir = config.get('Output_Parameters', 'parent_dir')
-        expt_dirs = [x.name for x in Path('./expts').iterdir() 
-                     if x.is_dir() and x.name.startswith('expt')]
-        expt_dirs.sort(key=lambda x:int(x[5:]))
-        curr_expt_dir = expt_dirs[-1]
-        self.output_dir = Path('./expts') / curr_expt_dir
+        return Path(config.get('Output_Parameters', 'parent_dir'))
+
+    def get_output_dir(self): 
+        expt_dirs = [x for x in self.parent_dir.iterdir()
+                     if x.is_dir() and x.name.startswith('expt_')]
+        if not expt_dirs:
+            raise FileNotFoundError(f"No experiment directories found in {self.parent_dir}")
+
+        expt_dirs.sort(key=lambda x: int(x.name.split('_')[1]))
+        self.output_dir = expt_dirs[-1]
 
     def make_images_movie(self):
 
