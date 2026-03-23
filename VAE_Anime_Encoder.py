@@ -133,5 +133,5 @@ if __name__ == '__main__':
                           latent_dim=512)
     encoder.set_encoder_model()
     encoder.show_model()
-    enc_output_shape = tuple(encoder.encoder_net.get_layer('lrelu_3').input.shape)
+    enc_output_shape = tuple(encoder.encoder_net.get_layer('encoder_flatten').input.shape)
     logging.info(f"Output shape of the encoder: {enc_output_shape}")

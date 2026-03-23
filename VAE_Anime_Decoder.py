@@ -24,7 +24,7 @@ class VAE_Decoder:
         """Defines the decoder layers.
         Args:
             inputs -- output of the encoder 
-            conv_shape -- shape of the features before flattening
+
 
         Returns:
             tensor containing the decoded output
@@ -72,14 +72,9 @@ class VAE_Decoder:
                                             name="decoder_final")(x)  
         return x    
     
-    def set_decoder_model(self, decoder_input_shape=(None, 512)):
+    def set_decoder_model(self):
         """Defines the decoder model.
-        Args:
-            latent_dim -- dimensionality of the latent space
-            conv_shape -- shape of the features before flattening
 
-        Returns:
-            model -- the decoder model
         """
         inputs = tf.keras.layers.Input(shape=(self.latent_dim,))
         outputs = self.decoder_layers(inputs)

@@ -69,7 +69,9 @@ def sign(x):
         return -1
     else:
         return 0
-    
+
+# Retained intentionally: alternate KL-adjustment update modes
+# (multiplicative vs additive) are still under evaluation.
 def delt_add(x, y):
     return x + y    
 def delt_sub(x,y):
@@ -95,6 +97,8 @@ class DeltaGenerator():
             return base_function(x, y)
         return custom_function
     
+# Retained intentionally: used for debugging runs where VAE loss
+# trajectories suddenly diverge to NaN/Inf.
 def find_nan_or_inf_index(lst):
     # Returns value of first NaN or inf in a list, so list can be truncated threre
     # If non nan or inf, list doesn't need truncation, so list length is returned

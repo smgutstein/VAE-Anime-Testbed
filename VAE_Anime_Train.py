@@ -5,11 +5,14 @@ import numpy as np
 import pickle
 import shutil
 import sys
+
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"   # hide INFO, WARNING, and most ERROR logs
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # removes the oneDNN startup note
 import tensorflow as tf
 
 from collections import deque
 from datetime import timedelta
-#from memory_profiler import profile
 from pathlib import Path
 from time import time, ctime
 
@@ -147,9 +150,7 @@ class VAE_Trainer:
         # Get 1 batch from validation set and convert
         # to list of numpy arrays
         test_dataset = self.data.validation_dataset.take(1)
-        output_samples = []
-        for input_image in test_dataset.as_numpy_iterator():
-            output_samples = input_image
+        output_samples = next(iter(test_dataset)).numpy()
 
         # VAE's response to each member of test_dataset
         vae_predicted, _, _ = self.vae.vae_net.predict(output_samples)
@@ -350,11 +351,11 @@ class VAE_Trainer:
                     prev_loss_kl = curr_loss_kl
 
                     # Calculate Total Effective Loss
-                    tempx1 = max(self.kl_adj_factor_queue)
-                    tempn1 = min(self.kl_adj_factor_queue)
+                    max_kl_adj_factor = max(self.kl_adj_factor_queue)
+                    min_kl_adj_factor  = min(self.kl_adj_factor_queue)
                     loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4e} -- {self.kl_adj_factor:.4e}  ")
                     loss_file.write(f"{test1} {test2} {num_maxes} ")
-                    loss_file.write(f"{tempx1} {tempn1} {len(self.kl_adj_factor_queue)}\n")
+                    loss_file.write(f"{max_kl_adj_factor } {min_kl_adj_factor } {len(self.kl_adj_factor_queue)}\n")
 
                     # Logging + metrics
                     if step % 10 == 0:

@@ -63,10 +63,11 @@ class Datasets():
             data_url = "https://storage.googleapis.com/learning-datasets/Resources/anime-faces.zip"
             data_file_name = "animefaces.zip"
             download_dir = '/tmp/anime/'
-            urllib.request.urlretrieve(data_url, data_file_name)
+            zip_path = Path(download_dir) / data_file_name
+            urllib.request.urlretrieve(data_url, zip_path)
 
             # extract the zip file
-            zip_ref = zipfile.ZipFile(data_file_name, 'r')
+            zip_ref = zipfile.ZipFile(zip_path, 'r')
             zip_ref.extractall(download_dir)
             zip_ref.close()
         self.data_downloaded = True
@@ -94,7 +95,7 @@ class Datasets():
         def map_image(image_filename):
             '''preprocesses the images'''
             img_raw = tf.io.read_file(image_filename)
-            image = tf.image.decode_jpeg(img_raw)
+            image = tf.io.decode_image(img_raw, channels=3, expand_animations=False)
 
             image = tf.cast(image, dtype=tf.float32)
             image = tf.image.resize(image, (self.image_size, 
@@ -125,17 +126,19 @@ class Datasets():
         # load the training image paths into tensors, create batches and shuffle
         train_files = list(map(str, train_paths))
         training_dataset = tf.data.Dataset.from_tensor_slices(train_files)
-        training_dataset = training_dataset.map(map_image)
-        #training_dataset = training_dataset.shuffle(1000).batch(self.batch_size)
-        training_dataset = training_dataset.shuffle(1000).batch(self.batch_size, drop_remainder=True)
+        training_dataset = training_dataset.map(map_image, 
+                                                num_parallel_calls=tf.data.AUTOTUNE)
+        training_dataset = training_dataset.shuffle(1000).batch(self.batch_size, 
+                                                                drop_remainder=True).prefetch(tf.data.AUTOTUNE)
 
 
         # load the validation image paths into tensors and create batches
         val_files = list(map(str, val_paths))
         validation_dataset = tf.data.Dataset.from_tensor_slices(val_files)
-        validation_dataset = validation_dataset.map(map_image)
-        #validation_dataset = validation_dataset.batch(self.batch_size)
-        validation_dataset = validation_dataset.batch(self.batch_size, drop_remainder=True)
+        validation_dataset = validation_dataset.map(map_image, 
+                                                num_parallel_calls=tf.data.AUTOTUNE)
+        validation_dataset = validation_dataset.batch(self.batch_size, 
+                                                      drop_remainder=True).prefetch(tf.data.AUTOTUNE)
 
 
         # set the training and validation datasets and print the number of batches in each
@@ -180,7 +183,7 @@ class Datasets():
         # Display the images in a grid
         i = 1
         for image in dataset:
-            disp_img = np.reshape(image, (64, 64, 3))
+            disp_img = np.reshape(image, (self.image_size, self.image_size, 3))
             plt.subplot(n_rows, n_cols, i)
             plt.xticks([])
             plt.yticks([])

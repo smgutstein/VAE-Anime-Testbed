@@ -7,7 +7,6 @@ import numpy as np
 import pickle
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.ticker import EngFormatter
 from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
@@ -64,10 +63,6 @@ class AnalyzeResults():
         expt_dirs.sort(key=lambda x:int(x[5:]))
         curr_expt_dir = expt_dirs[-1]
         self.output_dir = Path('./expts') / curr_expt_dir
-        
-    def get_analysis_dir(self):
-        self.load_config_file()
-        return self.parent_dir / "analysis"
 
     def make_images_movie(self):
 
@@ -91,6 +86,7 @@ class AnalyzeResults():
             im = imageio.imread(file)
             writer.append_data(im)
         writer.close()
+        logging.info(f"Saved {self.movies_dir / movie_name}")
 
     def get_recon_kl_results(self):
         recon_loss_list=[]
@@ -143,14 +139,33 @@ class AnalyzeResults():
         kl_loss_list = kl_loss_list[:temp]
         adj_kl_factor_list = adj_kl_factor_list[:temp]
 
-        
-        temp = min(len(recon_loss_list), len(kl_loss_list), len(adj_kl_factor_list))
-        recon_loss_list = recon_loss_list[:temp]
-        kl_loss_list = kl_loss_list[:temp]
-        adj_kl_factor_list = adj_kl_factor_list[:temp]
-
-
         return recon_loss_list, kl_loss_list, adj_kl_factor_list    
+    
+    def read_loss_file_points(self):
+        """Read recon/KL points from stats/losses_file.txt.
+
+        Returns:
+            recon_pts, kl_pts
+        """
+        with open(self.stats_dir / Path('losses_file.txt'), 'r') as f:
+            fl = f.readlines()
+
+        # Remove lines with nan or inf
+        fl = [x for x in fl if ('nan' not in x) and ('inf' not in x)]
+
+        recon_pts = []
+        kl_pts = []
+        for curr_line in fl[1:]:  # Skip header
+            data = [x.strip() for x in curr_line.split('--')]
+            if len(data) >= 4:
+                recon_pts.append(float(data[2]))
+                kl_pts.append(float(data[3]))
+            else:
+                logging.warning(f"Last line of losses_file incomplete: {data}")
+                break
+
+        return fl, recon_pts, kl_pts
+
         
     def compare_recon_kl_losses(self):
 
@@ -191,9 +206,6 @@ class AnalyzeResults():
 
         num_pts = len(recon_loss_list)
 
-        # Create an EngFormatter object with desired precision
-        formatter = EngFormatter(places=0, unit='')  # Adjust places and unit as needed
-
 
         fig, axes = plt.subplots(2,2)  
         # Log scale plot of both losses
@@ -207,7 +219,6 @@ class AnalyzeResults():
         # Plot adjusted kl loss
         axes[0][1].set_xlabel('Iteration',fontsize=8, labelpad=-2)
         axes[0][1].set_ylabel('Adj KL Loss')
-        #axes[0][1].yaxis.set_major_formatter(formatter)
         axes[0][1].ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
         axes[0][1].plot(range(num_pts), adj_kl_factor_list,
                         label="adj kl factor", color='#ff7f0e')
@@ -235,21 +246,7 @@ class AnalyzeResults():
     def make_paretoish_graph(self):
 
         # Read file with recon and kl losses
-        with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
-            fl = f.readlines()
-        # Remove lines with nan or inf
-        fl =[x for x in fl if ('nan' not in x) and ('inf' not in x)]
-
-        recon_pts=[]
-        kl_pts = []
-        for curr_line in fl[1:]:
-            data = [x.strip() for x in curr_line.split('--')]
-            if len(data) >= 4:
-                recon_pts.append(float(data[2]))
-                kl_pts.append(float(data[3]))
-            else:
-                logging.warning(f"Last line of losses_file incomplete: {data}")
-                break
+        _, recon_pts, kl_pts = self.read_loss_file_points()
 
         fig, ax = plt.subplots()
 
@@ -392,26 +389,7 @@ class AnalyzeResults():
 
     def test_pareto_curve(self):
         # Read file with recon and kl losses
-        with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
-            fl = f.readlines()
-
-        # Remove lines with nan or inf
-        fl =[x for x in fl if ('nan' not in x) and ('inf' not in x)]   
-
-        recon_pts = []
-        kl_pts = []
-        for curr_line in fl[1:]:  # Skipping the header
-            data = [x.strip() for x in curr_line.split('--')]
-            if len(data) >= 4:
-                recon_pts.append(float(data[2]))
-                kl_pts.append(float(data[3]))
-            else:
-                logging.warning(f"Last line of losses_file incomplete: {data}")
-                break
- 
-        #skip_pts = 0#int(.05*len(recon_pts))   
-        #recon_pts = recon_pts[skip_pts:]
-        #kl_pts = kl_pts[skip_pts:]
+        _, recon_pts, kl_pts = self.read_loss_file_points()
  
 
         self.pareto_front.clear_front()
@@ -423,22 +401,7 @@ class AnalyzeResults():
     def make_paretoish_movie(self):
 
         # Read file with recon and kl losses
-        with open(self.stats_dir / Path('losses_file.txt'),'r') as f:
-            fl = f.readlines()
-
-        # Remove lines with nan or inf
-        fl =[x for x in fl if ('nan' not in x) and ('inf' not in x)]   
-
-        recon_pts = []
-        kl_pts = []
-        for curr_line in fl[1:]:  # Skipping the header
-            data = [x.strip() for x in curr_line.split('--')]
-            if len(data) >= 4:
-                recon_pts.append(float(data[2]))
-                kl_pts.append(float(data[3]))
-            else:
-                logging.warning(f"Last line of losses_file incomplete: {data}")
-                break
+        fl, recon_pts, kl_pts = self.read_loss_file_points()
  
         skip_pts = int(.05*len(recon_pts))   
         recon_pts = recon_pts[skip_pts:]
@@ -455,7 +418,14 @@ class AnalyzeResults():
 
         self.pareto_front.clear_front()
         self.pareto_front.add_points(recon_pts, kl_pts)
+
         pareto_curve = self.pareto_front.get_front()#self.pareto_front.get_smooth_pareto_curve()
+        if pareto_curve:
+            pareto_x = [pt[0] for pt in pareto_curve]
+            pareto_y = [pt[1] for pt in pareto_curve]
+        else:
+            pareto_x = []
+            pareto_y = []
 
 
         for idx in tqdm(range(num_frames+1),
@@ -481,8 +451,6 @@ class AnalyzeResults():
                         c=colors, cmap='cool')
             
             # Plot Pareto curve (line + points)
-            pareto_x = [x[0] for x in pareto_curve]
-            pareto_y = [y[1] for y in pareto_curve]
             ax.plot(pareto_x, pareto_y, 
                     color='dodgerblue', label='Smoothed Pareto', linewidth=2)
             ax.scatter(pareto_x, pareto_y, 
