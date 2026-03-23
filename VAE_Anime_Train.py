@@ -108,6 +108,8 @@ class VAE_Trainer:
         self.inc = self.delta_gen.inc_func 
         self.dec = self.delta_gen.dec_func
 
+        self.kl_adj_tensor = tf.Variable(self.kl_adj_factor, dtype=tf.float32, trainable=False)
+
     def load_config_file(self):
         '''Load the config file and set the parameters for training the VAE model.'''
         config = read_config_file(self.config_file)
@@ -291,13 +293,13 @@ class VAE_Trainer:
                 # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):
                     # Convert kl_adj_factor to tensor for tf.function
-                    kl_adj_tensor = tf.constant(self.kl_adj_factor, dtype=tf.float32)
+                    self.kl_adj_tensor.assign(self.kl_adj_factor)
 
                     # Call static train_step
                     loss_recon, loss_kl, mu, log_var, grads = self.train_step(
                         x_batch_train,
-                        kl_adj_tensor,
-                        self.vae,  # <-- pass the full wrapper with `.vae_net` and `.encoder`
+                        self.kl_adj_tensor,
+                        self.vae, 
                         self.mse_loss,
                         self.optimizer)
                     
