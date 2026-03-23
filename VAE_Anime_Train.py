@@ -52,7 +52,8 @@ class VAE_Trainer:
         # Create a new output directory for this experiment
         num_expts = max([int(d.name.split('_')[1]) 
                          for d in parent_output_dir.iterdir()
-                         if d.is_dir() and 'expt_' in d.name])
+                         if d.is_dir() and 'expt_' in d.name],
+                         default=0)
         self.curr_expt = num_expts+1
 
         self.output_dir = parent_output_dir / f"expt_{self.curr_expt}"
@@ -106,6 +107,8 @@ class VAE_Trainer:
         self.delta_gen = DeltaGenerator(delt_mul, delt_div, self.kl_adj_update_factor)
         self.inc = self.delta_gen.inc_func 
         self.dec = self.delta_gen.dec_func
+
+        self.kl_adj_tensor = tf.Variable(self.kl_adj_factor, dtype=tf.float32, trainable=False)
 
     def load_config_file(self):
         '''Load the config file and set the parameters for training the VAE model.'''
@@ -290,13 +293,13 @@ class VAE_Trainer:
                 # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):
                     # Convert kl_adj_factor to tensor for tf.function
-                    kl_adj_tensor = tf.constant(self.kl_adj_factor, dtype=tf.float32)
+                    self.kl_adj_tensor.assign(self.kl_adj_factor)
 
                     # Call static train_step
                     loss_recon, loss_kl, mu, log_var, grads = self.train_step(
                         x_batch_train,
-                        kl_adj_tensor,
-                        self.vae,  # <-- pass the full wrapper with `.vae_net` and `.encoder`
+                        self.kl_adj_tensor,
+                        self.vae,  
                         self.mse_loss,
                         self.optimizer)
                     
@@ -313,8 +316,11 @@ class VAE_Trainer:
                         import pdb
                         pdb.set_trace()
  
-                    # KL balancing
-                    if curr_loss_recon >= prev_loss_recon:
+                    # KL balancing 
+                    if (curr_loss_recon <= prev_loss_recon) and (curr_loss_kl <= prev_loss_kl):
+                        # Both shrinking - hold steady
+                        adj_str = "0"
+                    elif curr_loss_recon >= prev_loss_recon:
                         # Recon loss is getting worse, decrease emphasis on KL Loss
                         self.kl_adj_factor = self.dec(self.kl_adj_factor)
                         adj_str = "-"

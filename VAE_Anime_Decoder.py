@@ -31,9 +31,10 @@ class VAE_Decoder:
         """
 
         units = self.dec_input_shape[1] * self.dec_input_shape[2] * self.dec_input_shape[3]
-        x = tf.keras.layers.Dense(units, activation = 'relu', 
+        x = tf.keras.layers.Dense(units, activation = None, 
                                 name="decoder_dense1")(inputs)
         x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.LeakyReLU(name="lrelu_d0")(x)
         
         # reshape output using the conv_shape dimensions
         x = tf.keras.layers.Reshape((self.dec_input_shape[1], 
@@ -45,7 +46,7 @@ class VAE_Decoder:
         x = tf.keras.layers.Conv2DTranspose(filters=self.base_filters*self.filter_factors[2], 
                                             kernel_size=self.k_size, 
                                             strides=2, padding='same', 
-                                            activation='relu',  
+                                            activation=None,  
                                             name="decoder_conv2d_2")(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.LeakyReLU(name="lrelu_d1")(x)
@@ -53,7 +54,7 @@ class VAE_Decoder:
         x = tf.keras.layers.Conv2DTranspose(filters=self.base_filters*self.filter_factors[1], 
                                             kernel_size=self.k_size, 
                                             strides=2, padding='same',
-                                            activation='relu', 
+                                            activation=None, 
                                             name="decoder_conv2d_3")(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.LeakyReLU(name="lrelu_d2")(x)
@@ -61,7 +62,7 @@ class VAE_Decoder:
         x = tf.keras.layers.Conv2DTranspose(filters=self.base_filters*self.filter_factors[0], 
                                             kernel_size=self.k_size, 
                                             strides=2, padding='same', 
-                                            activation='relu', 
+                                            activation=None, 
                                             name="decoder_conv2d_4")(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.LeakyReLU(name="lrelu_d3")(x)

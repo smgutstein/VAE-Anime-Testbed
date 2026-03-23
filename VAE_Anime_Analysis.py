@@ -27,12 +27,11 @@ class AnalyzeResults():
             self.config_file = f'./expts/expt_{expt}/config.ini'
             self.parent_dir = Path(f'./expts/')
             self.output_dir = Path(f'./expts/expt_{expt}')
-
-        # Load the config file
-        assert Path(config_file).exists(), f"{config_file} does not exist"
-        assert is_config_file(config_file), f"{config_file} is invalid config file"
-        
-        self.config_file = config_file
+        else:
+            # Load the config file
+            assert Path(config_file).exists(), f"{config_file} does not exist"
+            assert is_config_file(config_file), f"{config_file} is invalid config file"
+            self.config_file = config_file
 
         self.pareto_front = ParetoFront()
 

@@ -189,7 +189,7 @@ class Datasets():
             plt.yticks([])
             plt.suptitle(data_samp_set + " Images")
             # Set the title of the window
-            plt.gcf().canvas.manager.set_window_title(data_samp_set + " Images")
+            # plt.gcf().canvas.manager.set_window_title(data_samp_set + " Images")
             plt.imshow(disp_img)
             i += 1
 

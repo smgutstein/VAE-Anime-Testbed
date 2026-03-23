@@ -57,7 +57,7 @@ class VAE_Encoder:
         x = tf.keras.layers.Conv2D(filters=self.base_filters*self.filter_factors[0], 
                                 kernel_size=self.k_size, strides=2, 
                                 padding="same", 
-                                activation='relu', name="encoder_conv1")(inputs)
+                                activation=None, name="encoder_conv1")(inputs)
         x = tf.keras.layers.BatchNormalization()(x)
         x= tf.keras.layers.LeakyReLU(name="lrelu_1")(x)
 
@@ -65,14 +65,14 @@ class VAE_Encoder:
         x = tf.keras.layers.Conv2D(filters=self.base_filters*self.filter_factors[1], 
                                 kernel_size=self.k_size, strides=2, 
                                 padding='same', 
-                                activation='relu', name="encoder_conv2")(x)
+                                activation=None, name="encoder_conv2")(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.LeakyReLU(name="lrelu_2")(x)
         
         x = tf.keras.layers.Conv2D(filters=self.base_filters*self.filter_factors[2], 
                                 kernel_size=self.k_size, strides=2, 
                                 padding='same', 
-                                activation='relu', name="encoder_conv3")(x)
+                                activation=None, name="encoder_conv3")(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.LeakyReLU(name="lrelu_3")(x)
 
@@ -83,7 +83,7 @@ class VAE_Encoder:
         x = tf.keras.layers.Flatten(name="encoder_flatten")(x)
 
         x = tf.keras.layers.Dense(self.encode_dense_units, 
-                                  activation='relu', 
+                                  activation=None, 
                                   name="encoder_dense")(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.LeakyReLU(name="lrelu_4")(x)
