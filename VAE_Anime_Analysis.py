@@ -56,15 +56,27 @@ class AnalyzeResults():
         config = read_config_file(self.config_file)
         return Path(config.get('Output_Parameters', 'parent_dir'))
 
-    def get_output_dir(self): 
-        expt_dirs = [x for x in self.parent_dir.iterdir()
-                     if x.is_dir() and x.name.startswith('expt_')]
+    def get_output_dir(self):
+        if not self.parent_dir.exists():
+            raise FileNotFoundError(f"Parent output directory does not exist: {self.parent_dir}")
+
+        expt_dirs = []
+        for x in self.parent_dir.iterdir():
+            if not x.is_dir():
+                continue
+            if not x.name.startswith("expt_"):
+                continue
+
+            suffix = x.name[len("expt_"):]
+            if suffix.isdigit():
+                expt_dirs.append(x)
+
         if not expt_dirs:
-            raise FileNotFoundError(f"No experiment directories found in {self.parent_dir}")
+            raise FileNotFoundError(f"No valid experiment directories found in {self.parent_dir}")
 
-        expt_dirs.sort(key=lambda x: int(x.name.split('_')[1]))
+        expt_dirs.sort(key=lambda x: int(x.name[len('expt_'):]))
         self.output_dir = expt_dirs[-1]
-
+        
     def make_images_movie(self):
 
         # Function used to converted epoch-step labeling

@@ -447,6 +447,16 @@ class VAE_Trainer:
                     out_str += f"tot run time = {tot_delta_time}"
                     logging.info(out_str)
 
+            if recon_loss_list or kl_loss_list or adj_kl_factor_list:
+                pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list], f1)
+                pickle.dump([mu_list, log_var_list], f2)
+                pickle.dump([mu_list2, log_var_list2], f3)
+                loss_file.flush()
+                f1.flush()
+                f2.flush()
+                f3.flush()
+                logging.info("Flushed final partial stats buffers")
+
             logging.info("End Time %s" % (ctime()))
             delta_time = str(timedelta(seconds=time() - start_time))
             logging.info("Running Time %s", (delta_time))
