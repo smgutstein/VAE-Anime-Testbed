@@ -29,7 +29,7 @@ class Datasets():
 
     
     '''
-    def __init__(self, output_dir="scratch_output", seed=None):
+    def __init__(self, output_dir="scratch_output", seed=None, data_dir=None):
         '''Initializes the class, creates the output directory, 
         using "scratch_output" as the default,     
         and sets flags indicating things to be done.'''
@@ -38,11 +38,15 @@ class Datasets():
         self.data_downloaded = False
         self.datasets_made = False
         self.seed = seed
-        if isinstance(output_dir, str):
-            self.output_dir = Path(output_dir)  
-        elif isinstance(output_dir, Path):          
-            self.output_dir = output_dir
+
+        self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        if data_dir is None:
+            self.data_dir = Path("./data/anime")
+        else:
+            self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def set_data_params(self, 
                         batch_size = 1500,
@@ -58,12 +62,12 @@ class Datasets():
         Currently, the dataset is a zipped file of anime faces.'''
 
         # make the data directory
-        Path('/tmp/anime').mkdir(exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         if len(list(Path('/tmp/anime').glob('*'))) < 10:
             # download the zipped dataset to the data directory
             data_url = "https://storage.googleapis.com/learning-datasets/Resources/anime-faces.zip"
             data_file_name = "animefaces.zip"
-            download_dir = '/tmp/anime/'
+            download_dir = str(self.data_dir)
             zip_path = Path(download_dir) / data_file_name
             urllib.request.urlretrieve(data_url, zip_path)
 
@@ -112,7 +116,7 @@ class Datasets():
             return image
 
         # get the list containing the image paths
-        paths = get_dataset_slice_paths("/tmp/anime/images/")
+        paths = get_dataset_slice_paths(self.data_dir / "images")
 
         # shuffle the paths reproducibly if a seed was supplied
         if self.seed is None:

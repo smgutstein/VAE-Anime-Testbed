@@ -19,12 +19,16 @@ from time import time, ctime
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_Full_Model import VAE_Model
 from VAE_Anime_Analysis import AnalyzeResults
+
 from utils import DeltaGenerator
-from utils import delt_mul, delt_div   
+from utils import delt_mul, delt_div
+from utils import get_data_dir
 from utils import get_git_hash
 from utils import get_next_experiment_dir
-from utils import is_config_file
-from utils import read_config_file
+from utils import get_parent_dir
+from utils import get_seed_and_determinism
+from utils import load_and_validate_config
+from utils import parse_bool
 from utils import set_all_seeds
 from utils import setup_logging
 from utils import sign
@@ -41,10 +45,10 @@ class VAE_Trainer:
     def __init__(self, config_file="config.ini"):
         # Load the config file
         assert Path(config_file).exists(), "Config file does not exist"
-        assert is_config_file(config_file), "Invalid config file"
         
         # Load training params & output directories from config file
         self.config_file = config_file
+        self.config = load_and_validate_config(config_file)
         self.load_config_file()
 
         # Make run randomness explicit and repeatable
@@ -86,7 +90,8 @@ class VAE_Trainer:
         self.vae = VAE_Model(output_dir=self.model_info_dir)
 
         # Initialize the Datasets class
-        self.data = Datasets(self.output_dir, seed=self.seed)
+        self.data = Datasets(self.output_dir, seed=self.seed, 
+                             data_dir=self.data_dir)
         self.data.set_data_params()
         self.data.download_data()
         self.data.make_train_and_validation_sets()
@@ -111,41 +116,29 @@ class VAE_Trainer:
 
     def load_config_file(self):
         '''Load the config file and set the parameters for training the VAE model.'''
-        config = read_config_file(self.config_file)
         
-        self.epochs = int(config.get('Training_Parameters', 'epochs'))      
-        self.learning_rate = float(config.get('Training_Parameters', 'learning_rate'))   
-        self.kl_adj_factor = float(config.get('Training_Parameters', 'kl_adj_factor'))  
-        self.kl_adj_factor_max = float(config.get('Training_Parameters', 'kl_adj_factor_max'))  
-        self.kl_adj_update_factor = float(config.get('Training_Parameters', 
+        self.epochs = int(self.config.get('Training_Parameters', 'epochs'))      
+        self.learning_rate = float(self.config.get('Training_Parameters', 'learning_rate'))   
+        self.kl_adj_factor = float(self.config.get('Training_Parameters', 'kl_adj_factor'))  
+        self.kl_adj_factor_max = float(self.config.get('Training_Parameters', 'kl_adj_factor_max'))  
+        self.kl_adj_update_factor = float(self.config.get('Training_Parameters', 
                                                      'kl_adj_update_factor'))
-        self.running_window = int(config.get('Training_Parameters', 'running_window'))
-        self.parent_dir = config.get('Output_Parameters', 'parent_dir')
+        self.running_window = int(self.config.get('Training_Parameters', 'running_window'))
+        self.parent_dir = get_parent_dir(self.config)
+        self.data_dir = get_data_dir(self.config)
 
         # Reproducibility parameters are optional.
         # Defaults make runs repeatable even when older config files omit them.
-        if config.has_section('Reproducibility') and config.has_option('Reproducibility', 'seed'):
-            self.seed = int(config.get('Reproducibility', 'seed'))
-        else:
-            self.seed = 1234
-
-        if config.has_section('Reproducibility') and config.has_option('Reproducibility', 'deterministic'):
-            temp = config.get('Reproducibility', 'deterministic').lower()
-            self.deterministic = temp in ('true', '1', 'yes', 'y', 'on')
-        else:
-            self.deterministic = False
+        self.seed, self.deterministic = get_seed_and_determinism(config)
 
         #Determine if the model should be saved
-        temp = config.get('Output_Parameters', 'save_net').lower() 
-        if temp == 'true' or temp == '1':
-            self.save_net = True            
-        elif temp == 'false' or temp == '0':
-            self.save_net = False   
+        if config.has_option('Output_Parameters', 'save_net'):
+            self.save_net = parse_bool(
+                config.get('Output_Parameters', 'save_net'),
+                'save_net')
         else:
-            logging.warning("Invalid save_net value in config file. Expect True/False, true/false or 1/0")
-            logging.warning(f"Found {temp} in config file. Will assume value of true")
-            self.save_net = True
-
+            self.save_net = False
+            
 
     def snapshot_vae_behavior (self, epoch=0, step=0, 
                                recon_loss=0, kl_loss=0):
@@ -468,9 +461,11 @@ if __name__ == "__main__":
     parser.add_argument("--log", default="INFO", help="Logging level")
 
     args = parser.parse_args()
-    if not is_config_file(args.config_file): 
-        logging.critical("Invalid config file")
-        sys.exit(1) 
+    try:
+        config = load_and_validate_config(args.config_file)
+    except Exception as e:
+        logging.critical(f"Invalid config file: {e}")
+        sys.exit(1)
 
     setup_logging(args.log)
 

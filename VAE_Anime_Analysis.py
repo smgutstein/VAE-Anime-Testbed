@@ -11,6 +11,8 @@ from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
 from utils import find_nan_or_inf_index
+from utils import get_experiment_dir
+from utils import get_latest_experiment_dir
 from utils import is_config_file
 from utils import read_config_file
 from utils import setup_logging
@@ -28,12 +30,10 @@ class AnalyzeResults():
         self.parent_dir = self.get_parent_dir()
 
         if expt != -1:
-            # Get the output directory for the specified expt
-            self.output_dir = self.parent_dir / f"expt_{expt}"
-            assert self.output_dir.exists(), f"Expt directory does not exist: {self.output_dir}"
+            # Get the output directory for the specified experiment
+            self.output_dir = get_experiment_dir(self.parent_dir, expt)
         else:
-            self.get_output_dir()
-
+            self.output_dir = get_latest_experiment_dir(self.parent_dir)
         self.pareto_front = ParetoFront()
 
 
@@ -55,27 +55,6 @@ class AnalyzeResults():
     def get_parent_dir(self):
         config = read_config_file(self.config_file)
         return Path(config.get('Output_Parameters', 'parent_dir'))
-
-    def get_output_dir(self):
-        if not self.parent_dir.exists():
-            raise FileNotFoundError(f"Parent output directory does not exist: {self.parent_dir}")
-
-        expt_dirs = []
-        for x in self.parent_dir.iterdir():
-            if not x.is_dir():
-                continue
-            if not x.name.startswith("expt_"):
-                continue
-
-            suffix = x.name[len("expt_"):]
-            if suffix.isdigit():
-                expt_dirs.append(x)
-
-        if not expt_dirs:
-            raise FileNotFoundError(f"No valid experiment directories found in {self.parent_dir}")
-
-        expt_dirs.sort(key=lambda x: int(x.name[len('expt_'):]))
-        self.output_dir = expt_dirs[-1]
 
     def make_images_movie(self):
 
