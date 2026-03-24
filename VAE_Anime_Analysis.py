@@ -29,7 +29,7 @@ class AnalyzeResults():
 
         if expt != -1:
             # Get the output directory for the specified expt
-            self.output_dir = Path(f'./expts/expt_{expt}')
+            self.output_dir = self.parent_dir / f"expt_{expt}"
             assert self.output_dir.exists(), f"Expt directory does not exist: {self.output_dir}"
         else:
             self.get_output_dir()
@@ -76,7 +76,7 @@ class AnalyzeResults():
 
         expt_dirs.sort(key=lambda x: int(x.name[len('expt_'):]))
         self.output_dir = expt_dirs[-1]
-        
+
     def make_images_movie(self):
 
         # Function used to converted epoch-step labeling

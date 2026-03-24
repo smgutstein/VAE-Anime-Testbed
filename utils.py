@@ -10,6 +10,8 @@ import subprocess as sp
 import tensorflow as tf
 import time
 
+from pathlib import Path
+
 def set_all_seeds(seed: int, deterministic: bool = False):
     """Set Python, NumPy, and TensorFlow seeds.
 
@@ -181,3 +183,179 @@ def setup_logging(level="INFO"):
         level=numeric_level,
         format="%(asctime)s (%(levelname)s) : %(message)s"
     )
+
+########################################
+# Boolean parsing
+########################################
+def parse_bool(value, field_name="value"):
+    """
+    Robust boolean parser.
+    Accepts: true/false, 1/0, yes/no (case-insensitive)
+    """
+    if isinstance(value, bool):
+        return value
+
+    if value is None:
+        raise ValueError(f"Missing boolean value for '{field_name}'")
+
+    val = str(value).strip().lower()
+
+    if val in {"true", "1", "yes", "y"}:
+        return True
+    elif val in {"false", "0", "no", "n"}:
+        return False
+    else:
+        raise ValueError(f"Invalid boolean for '{field_name}': {value}")
+
+
+########################################
+# Config loading + validation
+########################################
+def load_and_validate_config(config_file):
+    """
+    Load config and enforce required structure.
+    """
+    if not Path(config_file).exists():
+        raise FileNotFoundError(f"Config file not found: {config_file}")
+
+    config = configparser.ConfigParser()
+    config.read(config_file)
+
+    required_sections = ["Training_Parameters", "Output_Parameters"]
+
+    for section in required_sections:
+        if not config.has_section(section):
+            raise ValueError(f"Missing required config section: [{section}]")
+
+    # Optional sections
+    if not config.has_section("Reproducibility"):
+        logging.warning("Config missing [Reproducibility]; using defaults")
+
+    if not config.has_section("Data_Parameters"):
+        logging.warning("Config missing [Data_Parameters]; using defaults")
+
+    return config
+
+
+########################################
+# Config access helpers
+########################################
+def get_parent_dir(config):
+    return Path(config.get("Output_Parameters", "parent_dir"))
+
+
+def get_data_dir(config):
+    if config.has_section("Data_Parameters") and config.has_option("Data_Parameters", "data_dir"):
+        return Path(config.get("Data_Parameters", "data_dir"))
+    else:
+        # fallback default
+        return Path("./data/anime")
+
+
+def get_seed_and_determinism(config):
+    """
+    Backward-compatible:
+    - Prefer [Reproducibility]
+    - Fallback to [Training_Parameters] (deprecated)
+    """
+    seed = 1234
+    deterministic = False
+
+    if config.has_section("Reproducibility"):
+        if config.has_option("Reproducibility", "seed"):
+            seed = config.getint("Reproducibility", "seed")
+        if config.has_option("Reproducibility", "deterministic"):
+            deterministic = parse_bool(
+                config.get("Reproducibility", "deterministic"),
+                "deterministic"
+            )
+
+    elif config.has_section("Training_Parameters"):
+        # backward compatibility
+        if config.has_option("Training_Parameters", "seed"):
+            seed = config.getint("Training_Parameters", "seed")
+            logging.warning("Using deprecated location for 'seed' in [Training_Parameters]")
+
+        if config.has_option("Training_Parameters", "deterministic"):
+            deterministic = parse_bool(
+                config.get("Training_Parameters", "deterministic"),
+                "deterministic"
+            )
+            logging.warning("Using deprecated location for 'deterministic'")
+
+    return seed, deterministic
+
+
+########################################
+# Experiment directory helpers
+########################################
+def list_experiment_dirs(parent_dir):
+    """
+    Returns sorted list of experiment directories (expt_N)
+    """
+    parent_dir = Path(parent_dir)
+
+    if not parent_dir.exists():
+        return []
+
+    expt_dirs = []
+    for d in parent_dir.iterdir():
+        if not d.is_dir():
+            continue
+        if not d.name.startswith("expt_"):
+            continue
+
+        suffix = d.name[len("expt_"):]
+        if suffix.isdigit():
+            expt_dirs.append(d)
+        else:
+            logging.warning(f"Skipping malformed experiment directory name: {d.name}")
+
+    def extract_num(d):
+        try:
+            return int(d.name.split("_")[-1])
+        except Exception:
+            return -1
+
+    expt_dirs.sort(key=extract_num)
+    return expt_dirs
+
+
+def get_latest_experiment_dir(parent_dir):
+    expt_dirs = list_experiment_dirs(parent_dir)
+
+    if not expt_dirs:
+        raise RuntimeError(f"No experiment directories found in {parent_dir}")
+
+    return expt_dirs[-1]
+
+
+def get_next_experiment_dir(parent_dir):
+    """
+    Returns (next_expt_num, path)
+    """
+    parent_dir = Path(parent_dir)
+    parent_dir.mkdir(parents=True, exist_ok=True)
+
+    expt_dirs = list_experiment_dirs(parent_dir)
+
+    if not expt_dirs:
+        next_num = 1
+    else:
+        last = expt_dirs[-1].name
+        last_num = int(last.split("_")[-1])
+        next_num = last_num + 1
+
+    return next_num, parent_dir / f"expt_{next_num}"
+
+
+def get_experiment_dir(parent_dir, expt_num):
+    """
+    Returns path to specific experiment.
+    """
+    path = Path(parent_dir) / f"expt_{expt_num}"
+
+    if not path.exists():
+        raise FileNotFoundError(f"Experiment directory does not exist: {path}")
+
+    return path

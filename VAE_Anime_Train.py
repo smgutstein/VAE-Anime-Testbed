@@ -22,6 +22,7 @@ from VAE_Anime_Analysis import AnalyzeResults
 from utils import DeltaGenerator
 from utils import delt_mul, delt_div   
 from utils import get_git_hash
+from utils import get_next_experiment_dir
 from utils import is_config_file
 from utils import read_config_file
 from utils import set_all_seeds
@@ -50,28 +51,12 @@ class VAE_Trainer:
         set_all_seeds(self.seed, deterministic=self.deterministic)
         logging.info(f"Using random seed {self.seed} (deterministic={self.deterministic})")
 
-        # Set the output directories
-        parent_output_dir = Path(self.parent_dir)
-        parent_output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Create a new output directory for this experiment
-        expt_nums = []
-        for d in parent_output_dir.iterdir():
-            if not d.is_dir() or not d.name.startswith("expt_"):
-                continue
-            suffix = d.name[5:]
-            if suffix.isdigit():
-                expt_nums.append(int(suffix))
-            else:
-                logging.warning(f"Skipping malformed experiment directory name: {d.name}")
-
-        num_expts = max(expt_nums, default=0)
-        self.curr_expt = num_expts+1
-
-        self.output_dir = parent_output_dir / f"expt_{self.curr_expt}"
+        # Set the output directory for this experiment
+        self.curr_expt, self.output_dir = get_next_experiment_dir(self.parent_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy(self.config_file, self.output_dir / Path("config.ini")) 
-        logging.info(f"Storing Expt {num_expts+1} in {self.output_dir}")
+
+        shutil.copy(self.config_file, self.output_dir / "config.ini")
+        logging.info(f"Storing Expt {self.curr_expt} in {self.output_dir}")
 
 
         # Record the git hash used for this run, along with
