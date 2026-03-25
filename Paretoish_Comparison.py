@@ -5,7 +5,9 @@ from pathlib import Path
 
 from VAE_ParetoFront import ParetoFront
 from utils import is_config_file
+from utils import get_experiment_dir
 from utils import read_config_file
+
 
 
 def get_datapts(expt_file):
@@ -26,6 +28,26 @@ def get_datapts(expt_file):
  
 
     return recon_pts, kl_pts
+
+def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):
+    if expt_dir is not None:
+        resolved = Path(expt_dir)
+    elif expt_num is not None:
+        resolved = get_experiment_dir(parent_dir, expt_num)
+    else:
+        raise ValueError("Must provide either experiment number or experiment directory")
+
+    if not resolved.is_dir():
+        raise FileNotFoundError(f"Experiment directory does not exist: {resolved}")
+    return resolved
+
+
+def resolve_losses_file(expt_dir):
+    losses_file = Path(expt_dir) / 'stats' / 'losses_file.txt'
+    if not losses_file.is_file():
+        raise FileNotFoundError(f"Loss file does not exist: {losses_file}")
+    return losses_file
+
 
 def compare_graphs(expt1_num, recon_pts1, kl_pts1, 
                    expt2_num, recon_pts2, kl_pts2,
@@ -117,44 +139,51 @@ def compare_pareto_curves(expt1_num, recon_pts1, kl_pts1,
 if __name__ == "__main__":
     '''Compare the pareto-ish graphs of two experiments.'''
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
-    parser.add_argument('--expt1', type=int, help='Number of first experiment file')    
-    parser.add_argument('--expt2', type=int, help='Number of second experiment file')
+    parser.add_argument('--expt1', type=int, help='Number of first experiment')
+    parser.add_argument('--expt2', type=int, help='Number of second experiment')
+    parser.add_argument('--expt1_dir', type=str, help='Path to first experiment directory')
+    parser.add_argument('--expt2_dir', type=str, help='Path to second experiment directory')
+    parser.add_argument('--output_dir', type=str, help='Directory for comparison outputs')
+
     parser.add_argument('-c', '--config_file', type=str, nargs='?',
                         default='config.ini', help='Config file')
 
     args = parser.parse_args()
     e1 = args.expt1
     e2 = args.expt2
+    e1_dir_arg = args.expt1_dir
+    e2_dir_arg = args.expt2_dir
+
     config_file = args.config_file
 
     # Load the experiment files 
     assert is_config_file(config_file), "Invalid config file"
     config = read_config_file(config_file)
-    parent_dir = config.get('Output_Parameters', 'parent_dir')
+    parent_dir = Path(config.get('Output_Parameters', 'parent_dir'))
+
 
     # Check if the experiment directories exist
-    expt1_dir = parent_dir / Path(f'expt_{e1}') 
-    expt2_dir = parent_dir / Path(f'expt_{e2}')  
-    assert expt1_dir.is_dir(), f"Experiment {e1} directory - {expt1_dir}, does not exist"
-    assert expt2_dir.is_dir(), f"Experiment {e2} directory - {expt2_dir}, does not exist"
-
-    # Check if the experiment files exist
-    expt1_file = expt1_dir / Path('stats/losses_file.txt')
-    expt2_file = expt2_dir / Path('stats/losses_file.txt')
-    assert expt1_file.is_file(), f"Experiment {e1} file - {expt1_file}, does not exist"
-    assert expt2_file.is_file(), f"Experiment {e2} file - {expt2_file}, does not exist"
+    expt1_dir = resolve_experiment_dir(parent_dir, expt_num=e1, expt_dir=e1_dir_arg)
+    expt2_dir = resolve_experiment_dir(parent_dir, expt_num=e2, expt_dir=e2_dir_arg)
+    expt1_file = resolve_losses_file(expt1_dir)
+    expt2_file = resolve_losses_file(expt2_dir)
 
     # Get the data points
     recon_pts1, kl_pts1 = get_datapts(expt1_file)
     recon_pts2, kl_pts2 = get_datapts(expt2_file)
 
-    output_dir = Path(parent_dir) / Path('pareto_comps')
+    output_dir = Path(args.output_dir) if args.output_dir \
+                                       else Path(parent_dir) / Path('pareto_comps')
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    compare_graphs(e1, recon_pts1, kl_pts1, 
-                   e2, recon_pts2, kl_pts2,
+    expt1_label = e1 if e1 is not None else expt1_dir.name
+    expt2_label = e2 if e2 is not None else expt2_dir.name
+
+    compare_graphs(expt1_label, recon_pts1, kl_pts1, 
+                   expt2_label, recon_pts2, kl_pts2,
                    output_dir)
 
-    compare_pareto_curves(e1, recon_pts1, kl_pts1, 
-                          e2, recon_pts2, kl_pts2,
+    compare_pareto_curves(expt1_label, recon_pts1, kl_pts1, 
+                          expt2_label, recon_pts2, kl_pts2,
                           output_dir)

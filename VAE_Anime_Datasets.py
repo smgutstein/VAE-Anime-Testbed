@@ -63,19 +63,46 @@ class Datasets():
 
         # make the data directory
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        if len(list(Path('/tmp/anime').glob('*'))) < 10:
-            # download the zipped dataset to the data directory
-            data_url = "https://storage.googleapis.com/learning-datasets/Resources/anime-faces.zip"
-            data_file_name = "animefaces.zip"
-            download_dir = str(self.data_dir)
-            zip_path = Path(download_dir) / data_file_name
-            urllib.request.urlretrieve(data_url, zip_path)
+        images_dir = self.data_dir / "images"
+        existing_images = []
 
-            # extract the zip file
-            zip_ref = zipfile.ZipFile(zip_path, 'r')
-            zip_ref.extractall(download_dir)
-            zip_ref.close()
+        if images_dir.exists():
+            existing_images = [
+                p for p in images_dir.iterdir()
+                if p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            ]
+
+        if existing_images:
+            logging.info(f"Using existing dataset in {images_dir}")
+            self.data_downloaded = True
+            return
+
+        # download the zipped dataset to the configured data directory
+        data_url = "https://storage.googleapis.com/learning-datasets/Resources/anime-faces.zip"
+        data_file_name = "animefaces.zip"
+        zip_path = self.data_dir / data_file_name
+
+        logging.info(f"Downloading dataset to {zip_path}")
+        urllib.request.urlretrieve(data_url, zip_path)
+
+        # extract the zip file
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(self.data_dir)
+
+        extracted_images = []
+        if images_dir.exists():
+            extracted_images = [
+                p for p in images_dir.iterdir()
+                if p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            ]
+
+        if not extracted_images:
+            raise RuntimeError(
+                f"Dataset download/extraction completed, but no images were found in {images_dir}"
+            )
+
         self.data_downloaded = True
+
 
     def make_train_and_validation_sets(self):
         '''Creates training and validation datasets from the downloaded images.
@@ -117,6 +144,9 @@ class Datasets():
 
         # get the list containing the image paths
         paths = get_dataset_slice_paths(self.data_dir / "images")
+        if len(paths) == 0:
+            raise RuntimeError(f"No images found in {self.data_dir / 'images'}")
+
 
         # shuffle the paths reproducibly if a seed was supplied
         if self.seed is None:
@@ -131,6 +161,24 @@ class Datasets():
 
         train_paths = paths[:train_paths_len]
         val_paths = paths[train_paths_len:]
+
+        # check enough data loaded
+        if len(train_paths) == 0:
+            raise RuntimeError("Training split is empty.")
+
+        if len(val_paths) == 0:
+            raise RuntimeError("Validation split is empty.")
+
+        if len(train_paths) < self.batch_size:
+            logging.warning(
+                f"Training split has only {len(train_paths)} images, smaller than batch_size={self.batch_size}."
+            )
+
+        if len(val_paths) < self.batch_size:
+            logging.warning(
+                f"Validation split has only {len(val_paths)} images, smaller than batch_size={self.batch_size}. "
+                "Using a partial final batch."
+            )
 
         # load the training image paths into tensors, create batches and shuffle
         train_files = list(map(str, train_paths))
@@ -149,7 +197,7 @@ class Datasets():
         validation_dataset = validation_dataset.map(map_image, 
                                                 num_parallel_calls=tf.data.AUTOTUNE)
         validation_dataset = validation_dataset.batch(self.batch_size, 
-                                                      drop_remainder=True).prefetch(tf.data.AUTOTUNE)
+                                                      drop_remainder=False).prefetch(tf.data.AUTOTUNE)
 
 
         # set the training and validation datasets and print the number of batches in each

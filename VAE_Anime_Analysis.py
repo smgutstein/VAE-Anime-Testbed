@@ -5,7 +5,7 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
-
+import re
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from pathlib import Path
 from PIL import Image
@@ -39,6 +39,7 @@ class AnalyzeResults():
 
         logging.info(f"Making graphs of results in {self.output_dir}")
         self.raw_image_dir = self.output_dir / "raw_images"
+        self.raw_image_dir.mkdir(parents=True, exist_ok=True)
 
         self.stats_dir = self.output_dir / "stats" 
         self.stats_dir.mkdir(parents=True, exist_ok=True)
@@ -56,20 +57,34 @@ class AnalyzeResults():
         config = read_config_file(self.config_file)
         return Path(config.get('Output_Parameters', 'parent_dir'))
 
+    def require_artifact(self, path, description):
+        if not path.exists():
+            raise FileNotFoundError(f"Missing {description}: {path}")
+        return path
+
+
     def make_images_movie(self):
 
         # Function used to converted epoch-step labeling
         # of frames to frame numbers
         def frame_num(file_path):
             file_name = file_path.name
-            epoch = int(file_name.split("_")[3])
-            step = int(file_name.split("_")[4][4:-4])
+            match = re.match(r"^image_at_epoch_(\d+)_step(\d+)\.png$", file_name)
+            if match is None:
+                raise ValueError(f"Unexpected frame filename format: {file_name}")
+            epoch = int(match.group(1))
+            step = int(match.group(2))
+
             frame_num = 100*epoch + step
             return frame_num
         
+        self.require_artifact(self.raw_image_dir, "raw image directory")
         frames = [file for file in self.raw_image_dir.iterdir() 
-                  if str(file.name)[:14] == "image_at_epoch"]
-        frames.sort(key=frame_num)
+                  if re.match(r"^image_at_epoch_\d+_step\d+\.png$", file.name)]
+        if len(frames) == 0:
+            raise RuntimeError(f"No movie frames found in {self.raw_image_dir}")
+        else:
+            frames.sort(key=frame_num)
 
         # Make movie
         movie_name = 'vae_movie.mp4'
@@ -86,7 +101,8 @@ class AnalyzeResults():
         adj_kl_factor_list=[]
   
         try:
-            with open(self.stats_dir / Path('loss_lists.pkl'),'rb') as f:
+            loss_lists_file = self.require_artifact(self.stats_dir / Path('loss_lists.pkl'), 'loss list pickle')
+            with open(loss_lists_file,'rb') as f:
                 while True:
                     try:
                         # Load the next object from the pickle file
@@ -109,11 +125,13 @@ class AnalyzeResults():
                     except Exception as e:
                         # Handle other exceptions (e.g., pickle decode error)
                         logging.error("Error loading data:", e)
-        except FileNotFoundError:
-            logging.critical("File not found:", self.stats_dir / Path('loss_lists.pkl'))
-        
+
+        except FileNotFoundError as e:
+            logging.critical(str(e))
+
         except Exception as e:
             logging.error("Error:", e)
+        
 
         # Remove nan and inf values
         recon_loss_list = [x for x in recon_loss_list 
@@ -139,7 +157,8 @@ class AnalyzeResults():
         Returns:
             recon_pts, kl_pts
         """
-        with open(self.stats_dir / Path('losses_file.txt'), 'r') as f:
+        losses_file = self.require_artifact(self.stats_dir / Path('losses_file.txt'), 'loss text file')
+        with open(losses_file, 'r') as f:
             fl = f.readlines()
 
         # Remove lines with nan or inf
@@ -162,6 +181,9 @@ class AnalyzeResults():
     def compare_recon_kl_losses(self):
 
         recon_loss_list, kl_loss_list, _ = self.get_recon_kl_results()
+        if len(recon_loss_list) == 0 or len(kl_loss_list) == 0:
+            raise RuntimeError(f"No reconstruction/KL points found in {self.stats_dir}")
+
 
         fig, axes = plt.subplots(3)  # Create a figure containing a single axes.
         axes[0].set_xlabel('Iteration')
@@ -195,6 +217,8 @@ class AnalyzeResults():
     def compare_recon_kl_losses2(self):
 
         recon_loss_list, kl_loss_list, adj_kl_factor_list = self.get_recon_kl_results()
+        if len(recon_loss_list) == 0 or len(kl_loss_list) == 0:
+            raise RuntimeError(f"No reconstruction/KL points found in {self.stats_dir}")
 
         num_pts = len(recon_loss_list)
 

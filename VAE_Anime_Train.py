@@ -129,12 +129,12 @@ class VAE_Trainer:
 
         # Reproducibility parameters are optional.
         # Defaults make runs repeatable even when older config files omit them.
-        self.seed, self.deterministic = get_seed_and_determinism(config)
+        self.seed, self.deterministic = get_seed_and_determinism(self.config)
 
         #Determine if the model should be saved
-        if config.has_option('Output_Parameters', 'save_net'):
+        if self.config.has_option('Output_Parameters', 'save_net'):
             self.save_net = parse_bool(
-                config.get('Output_Parameters', 'save_net'),
+                self.config.get('Output_Parameters', 'save_net'),
                 'save_net')
         else:
             self.save_net = False
