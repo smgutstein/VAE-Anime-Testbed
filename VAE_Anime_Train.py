@@ -16,19 +16,17 @@ from datetime import timedelta
 from pathlib import Path
 from time import time, ctime
 
+from VAE_Anime_Analysis import AnalyzeResults
+from VAE_Anime_Config import TrainerConfig
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_Full_Model import VAE_Model
-from VAE_Anime_Analysis import AnalyzeResults
+
 
 from utils import DeltaGenerator
 from utils import delt_mul, delt_div
-from utils import get_data_dir
 from utils import get_git_hash
 from utils import get_next_experiment_dir
-from utils import get_parent_dir
-from utils import get_seed_and_determinism
 from utils import load_and_validate_config
-from utils import parse_bool
 from utils import set_all_seeds
 from utils import setup_logging
 from utils import sign
@@ -46,17 +44,16 @@ class VAE_Trainer:
         # Load the config file
         assert Path(config_file).exists(), "Config file does not exist"
         
-        # Load training params & output directories from config file
-        self.config_file = config_file
-        self.config = load_and_validate_config(config_file)
-        self.load_config_file()
+        # Load typed training params from config file
+        self.cfg = TrainerConfig.from_file(config_file)
+        self.config_file = str(self.cfg.config_file)
 
         # Make run randomness explicit and repeatable
-        set_all_seeds(self.seed, deterministic=self.deterministic)
-        logging.info(f"Using random seed {self.seed} (deterministic={self.deterministic})")
+        set_all_seeds(self.cfg.seed, deterministic=self.cfg.deterministic)
+        logging.info(f"Using random seed {self.cfg.seed} (deterministic={self.cfg.deterministic})")
 
         # Set the output directory for this experiment
-        self.curr_expt, self.output_dir = get_next_experiment_dir(self.parent_dir)
+        self.curr_expt, self.output_dir = get_next_experiment_dir(self.cfg.parent_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         shutil.copy(self.config_file, self.output_dir / "config.ini")
@@ -71,8 +68,8 @@ class VAE_Trainer:
             f.write("Git Hash: \n")
             f.write(hash_str)
             f.write("\n")   
-            f.write(f"Random Seed: {self.seed}\n")
-            f.write(f"Deterministic TF Ops: {self.deterministic}\n")
+            f.write(f"Random Seed: {self.cfg.seed}\n")
+            f.write(f"Deterministic TF Ops: {self.cfg.deterministic}\n")
 
         # Set up the output directories
         self.raw_image_dir = self.output_dir / "raw_images"
@@ -88,24 +85,24 @@ class VAE_Trainer:
         self.model_info_dir = self.output_dir / "model_info"
         self.model_info_dir.mkdir(parents=True, exist_ok=True)
         self.vae = VAE_Model(
-            enc_input_shape=(self.image_size, self.image_size, 3),
-            latent_dim=self.latent_dim,
-            base_filters=self.base_filters,
-            filter_factors=self.filter_factors,
-            encode_dense_units=self.encode_dense_units,
-            kernel_size=self.kernel_size,
+            enc_input_shape=(self.cfg.image_size, self.cfg.image_size, 3),
+            latent_dim=self.cfg.latent_dim,
+            base_filters=self.cfg.base_filters,
+            filter_factors=self.cfg.filter_factors,
+            encode_dense_units=self.cfg.encode_dense_units,
+            kernel_size=self.cfg.kernel_size,
             output_dir=self.model_info_dir,
         )
 
         # Initialize the Datasets class
-        self.data = Datasets(self.output_dir, seed=self.seed, 
-                             data_dir=self.data_dir)
+        self.data = Datasets(self.output_dir, seed=self.cfg.seed, 
+                             data_dir=self.cfg.data_dir)
         self.data.set_data_params(
-            batch_size=self.batch_size,
-            image_size=self.image_size,
-            val_split=self.val_split,
-            shuffle_buffer=self.shuffle_buffer,
-            train_drop_remainder=self.train_drop_remainder,
+            batch_size=self.cfg.batch_size,
+            image_size=self.cfg.image_size,
+            val_split=self.cfg.val_split,
+            shuffle_buffer=self.cfg.shuffle_buffer,
+            train_drop_remainder=self.cfg.train_drop_remainder,
         )
         self.data.download_data()
         self.data.make_train_and_validation_sets()
@@ -115,9 +112,14 @@ class VAE_Trainer:
         self.fixed_gen_img_seeds = tf.random.normal(shape=[4, self.vae.latent_dim])
 
         # Training parameters
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-        self.kl_adj_factor_queue = deque(maxlen=self.running_window)
-        self.kl_adj_factor_delta_queue = deque(maxlen=self.running_window)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.cfg.learning_rate)
+        self.kl_adj_factor = self.cfg.kl_adj_factor
+        self.kl_adj_factor_max = self.cfg.kl_adj_factor_max
+        self.kl_adj_update_factor = self.cfg.kl_adj_update_factor
+        self.kl_adj_factor_queue = deque(maxlen=self.cfg.running_window)
+        self.kl_adj_factor_delta_queue = deque(maxlen=self.cfg.running_window)
+
+
 
         # Initialize Delta Generator 
         #   Creates increment & decrement functions 
@@ -128,70 +130,6 @@ class VAE_Trainer:
 
         self.kl_adj_tensor = tf.Variable(self.kl_adj_factor, dtype=tf.float32, trainable=False)
 
-    def load_config_file(self):
-        '''Load the config file and set the parameters for training the VAE model.'''
-        
-        self.epochs = int(self.config.get('Training_Parameters', 'epochs'))      
-        self.learning_rate = float(self.config.get('Training_Parameters', 'learning_rate'))   
-        self.kl_adj_factor = float(self.config.get('Training_Parameters', 'kl_adj_factor'))  
-        self.kl_adj_factor_max = float(self.config.get('Training_Parameters', 'kl_adj_factor_max'))  
-        self.kl_adj_update_factor = float(self.config.get('Training_Parameters', 
-                                                     'kl_adj_update_factor'))
-        self.running_window = int(self.config.get('Training_Parameters', 'running_window'))
-        self.parent_dir = get_parent_dir(self.config)
-        self.data_dir = get_data_dir(self.config)
-
-        self.batch_size = int(self.config.get('Data_Parameters', 'batch_size'))
-        self.image_size = int(self.config.get('Data_Parameters', 'image_size'))
-        self.val_split = float(self.config.get('Data_Parameters', 'val_split'))
-        self.shuffle_buffer = int(self.config.get('Data_Parameters', 'shuffle_buffer'))
-        self.train_drop_remainder = parse_bool(
-            self.config.get('Data_Parameters', 'train_drop_remainder'),
-            'train_drop_remainder'
-        )
-
-        self.latent_dim = int(self.config.get('Model_Parameters', 'latent_dim'))
-        self.base_filters = int(self.config.get('Model_Parameters', 'base_filters'))
-        self.filter_factors = [
-            int(x.strip()) for x in self.config.get('Model_Parameters', 'filter_factors').split(',')
-        ]
-        if len(self.filter_factors) != 3:
-            raise ValueError(
-                "Model_Parameters.filter_factors must contain exactly 3 integers "
-                "because the current encoder/decoder architecture has exactly 3 "
-                "convolution stages."
-            )
-        
-        self.encode_dense_units = int(self.config.get('Model_Parameters', 'encode_dense_units'))
-        self.kernel_size = int(self.config.get('Model_Parameters', 'kernel_size'))
-
-        self.snapshot_every = int(self.config.get('Monitoring_Parameters', 'snapshot_every'))
-        self.train_preview_count = int(self.config.get('Monitoring_Parameters', 'train_preview_count'))
-        self.valid_preview_count = int(self.config.get('Monitoring_Parameters', 'valid_preview_count'))
-        self.take_initial_snapshot = parse_bool(
-            self.config.get('Monitoring_Parameters', 'take_initial_snapshot'),
-            'take_initial_snapshot'
-        )
-        self.run_analysis = parse_bool(
-            self.config.get('Monitoring_Parameters', 'run_analysis'),
-            'run_analysis'
-        )
-        self.make_mu_log_var_movies = parse_bool(
-            self.config.get('Monitoring_Parameters', 'make_mu_log_var_movies'),
-            'make_mu_log_var_movies'
-        )
-
-        # Reproducibility parameters are optional.
-        # Defaults make runs repeatable even when older config files omit them.
-        self.seed, self.deterministic = get_seed_and_determinism(self.config)
-
-        #Determine if the model should be saved
-        if self.config.has_option('Output_Parameters', 'save_net'):
-            self.save_net = parse_bool(
-                self.config.get('Output_Parameters', 'save_net'),
-                'save_net')
-        else:
-            self.save_net = False
             
 
     def snapshot_vae_behavior (self, epoch=0, step=0, 
@@ -354,7 +292,7 @@ class VAE_Trainer:
         ):
             loss_file.write(f"Epoch -- Step -- Recon Loss -- KL Loss     -- KL_Adj_Factor\n")
 
-            for epoch in range(self.epochs):
+            for epoch in range(self.cfg.epochs):
                 logging.info('Start of epoch %d at %s' % (epoch, ctime()))
 
                 # Flush buffers
@@ -436,7 +374,7 @@ class VAE_Trainer:
                     loss_file.write(f"{max_kl_adj_factor } {min_kl_adj_factor } {len(self.kl_adj_factor_queue)}\n")
 
                     # Logging + metrics
-                    if step % self.snapshot_every == 0:
+                    if step % self.cfg.snapshot_every == 0:
                         self.snapshot_vae_behavior(epoch, step, curr_loss_recon, curr_loss_kl)
 
                     recon_loss_list.append(curr_loss_recon)
@@ -457,7 +395,7 @@ class VAE_Trainer:
                     self.loss_metric_recon(loss_recon)
                     self.loss_metric_kl(loss_kl)
 
-                    if step % self.snapshot_every == 0:
+                    if step % self.cfg.snapshot_every == 0:
                         pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list], f1)
                         pickle.dump([mu_list, log_var_list], f2)
                         pickle.dump([mu_list2, log_var_list2], f3)
@@ -493,7 +431,7 @@ class VAE_Trainer:
             delta_time = str(timedelta(seconds=time() - start_time))
             logging.info("Running Time %s", (delta_time))
 
-            if self.save_net:
+            if self.cfg.save_net:
                 logging.info(f"Saving the model to {self.stats_dir / Path('anime.keras')}")
                 self.vae.vae_net.save(self.stats_dir / Path("anime.keras"))
             else:
@@ -525,19 +463,19 @@ if __name__ == "__main__":
 
     vae = VAE_Trainer(args.config_file)
     vae.vae.show_model()
-    vae.data.display_sample_data('t', vae.train_preview_count)
-    vae.data.display_sample_data('v', vae.valid_preview_count)
-    if vae.take_initial_snapshot:
+    vae.data.display_sample_data('t', vae.cfg.train_preview_count)
+    vae.data.display_sample_data('v', vae.cfg.valid_preview_count)
+    if vae.cfg.take_initial_snapshot:
         vae.snapshot_vae_behavior()
     vae.train_loop()
 
-    if vae.run_analysis:
+    if vae.cfg.run_analysis:
         logging.info("Starting to analyze results....")
         ar = AnalyzeResults(args.config_file, vae.curr_expt)
         ar.make_singleton_graphs()
         ar.make_images_movie()
         ar.make_pareto_curve_graph()
         ar.make_paretoish_movie()
-        if vae.make_mu_log_var_movies:
+        if vae.cfg.make_mu_log_var_movies:
             ar.make_mu_log_var_movie(log_var_graph=True)
             ar.make_mu_log_var_movie(log_var_graph=False)
