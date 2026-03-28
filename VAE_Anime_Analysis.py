@@ -298,7 +298,11 @@ class AnalyzeResults():
         mu=[]
         log_var=[]
         try:
-            with open(self.stats_dir / Path('mu_log_var_lists.pkl'),'rb') as f:
+            mu_log_var_file = self.require_artifact(
+                 self.stats_dir / Path('mu_log_var_lists.pkl'),
+                'mu/log_var pickle'
+            )
+            with open(mu_log_var_file,'rb') as f:                
                 while True:
                     try:
                         # Load the next object from the pickle file
@@ -321,8 +325,9 @@ class AnalyzeResults():
                         # Handle other exceptions (e.g., pickle decode error)
                         logging.error("Error loading data:", e)  
 
+
         except FileNotFoundError:
-            logging.critical("File not found:", self.stats_dir / Path('loss_lists.pkl'))
+            logging.critical(f"File not found: {self.stats_dir / Path('mu_log_var_lists.pkl')}")
         
         except Exception as e:
             logging.error("Error:", e)

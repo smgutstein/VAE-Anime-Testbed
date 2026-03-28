@@ -2,15 +2,12 @@ import argparse
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
-import pickle
-import sys
 
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"   # hide INFO, WARNING, and most ERROR logs
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # removes the oneDNN startup note
 import tensorflow as tf
 
-from collections import deque
 from datetime import timedelta
 from pathlib import Path
 from time import time, ctime
@@ -21,6 +18,7 @@ from VAE_Anime_Datasets import Datasets
 from VAE_Anime_ExperimentRun import ExperimentRun
 from VAE_Anime_Full_Model import VAE_Model
 from VAE_Anime_KL_Controller import KLController
+from VAE_Anime_Training_Monitor import TrainingMonitor
 
 from utils import set_all_seeds
 from utils import setup_logging
@@ -96,7 +94,11 @@ class VAE_Trainer:
             dtype=tf.float32,
             trainable=False,
         )
-          
+
+        self.monitor = TrainingMonitor(
+            stats_dir=self.stats_dir,
+            snapshot_every=self.cfg.snapshot_every,
+        )       
 
     def snapshot_vae_behavior (self, epoch=0, step=0, 
                                recon_loss=0, kl_loss=0):
@@ -235,34 +237,20 @@ class VAE_Trainer:
 
         # Track moments when the controller shrinks its update factor
         adj_ctr = [(0, 0, self.kl_controller.current_update_factor())]
-
-        # Lists of values for later plottting & diagnostics
-        recon_loss_list = []
-        kl_loss_list = []
-        adj_kl_factor_list = []
         grad_list = []
-        mu_list = []
-        log_var_list = []
-        mu_list2 = []
-        log_var_list2 = []
 
-        with (
-            open(self.stats_dir / Path("losses_file.txt"), 'w') as loss_file,
-            open(self.stats_dir / Path("loss_lists.pkl"), "wb") as f1,
-            open(self.stats_dir / Path("mu_log_var_lists.pkl"), "wb") as f2,
-            open(self.stats_dir / Path("mu_log_var_lists2.pkl"), "wb") as f3
-        ):
-            loss_file.write(f"Epoch -- Step -- Recon Loss -- KL Loss     -- KL_Adj_Factor\n")
+        self.monitor.open()
+        try:
 
             for epoch in range(self.cfg.epochs):
                 logging.info('Start of epoch %d at %s' % (epoch, ctime()))
 
                 # Flush buffers
                 if (epoch + 1) % 100 == 0:
-                    loss_file.flush()
-                    f1.flush()
-                    f2.flush()
-                    f3.flush()
+                    self.monitor.loss_file.flush()
+                    self.monitor.f_loss_lists.flush()
+                    self.monitor.f_mu.flush()
+                    self.monitor.f_var.flush()
                     logging.info("File Buffers Flushed ")
 
                 # Iterate over the batches of the dataset.
@@ -304,46 +292,45 @@ class VAE_Trainer:
                     if update_info["update_factor_changed"]:
                         adj_ctr.append((epoch, step, update_info["update_factor"]))
 
-                    # Calculate Total Effective Loss
-
-                    loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4e} -- {curr_kl_adj_factor:.4e}  ")
-                    loss_file.write(f"{test1} {test2} {num_maxes} ")
-                    loss_file.write(f"{max_kl_adj_factor } {min_kl_adj_factor } {update_info['window_len']}\n")
+                    
+                    self.monitor.record_text_line(
+                        epoch=epoch,
+                        step=step,
+                        loss_recon=loss_recon,
+                        loss_kl=loss_kl,
+                        curr_kl_adj_factor=curr_kl_adj_factor,
+                        test1=test1,
+                        test2=test2,
+                        num_maxes=num_maxes,
+                        max_kl_adj_factor=max_kl_adj_factor,
+                        min_kl_adj_factor=min_kl_adj_factor,
+                        window_len=update_info["window_len"],
+                    )
 
                     # Logging + metrics
-                    if step % self.cfg.snapshot_every == 0:
+                    if self.monitor.is_snapshot_step(step):
                         self.snapshot_vae_behavior(epoch, step, curr_loss_recon, curr_loss_kl)
 
-                    recon_loss_list.append(curr_loss_recon)
-                    kl_loss_list.append(curr_loss_kl)
-                    adj_kl_factor_list.append(curr_kl_adj_factor)
+                    self.monitor.record_losses(
+                        curr_loss_recon=curr_loss_recon,
+                        curr_loss_kl=curr_loss_kl,
+                        curr_kl_adj_factor=curr_kl_adj_factor,
+                    )
 
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
 
-                    # Track means of mu and log_var
-                    mu_list.append(tf.reduce_mean(mu, 0))
-                    log_var_list.append(tf.reduce_mean(log_var, 0))
-
-                    # Track variances of mu and log_var
-                    mu_list2.append(tf.math.reduce_variance(mu, 0))
-                    log_var_list2.append(tf.math.reduce_variance(log_var, 0))
+                    self.monitor.record_latent_stats(
+                        mu_mean=tf.reduce_mean(mu, 0),
+                        log_var_mean=tf.reduce_mean(log_var, 0),
+                        mu_var=tf.math.reduce_variance(mu, 0),
+                        log_var_var=tf.math.reduce_variance(log_var, 0),
+                    )
 
                     self.loss_metric_recon(loss_recon)
                     self.loss_metric_kl(loss_kl)
 
-                    if step % self.cfg.snapshot_every == 0:
-                        pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list], f1)
-                        pickle.dump([mu_list, log_var_list], f2)
-                        pickle.dump([mu_list2, log_var_list2], f3)
-
-                        recon_loss_list.clear()
-                        kl_loss_list.clear()
-                        adj_kl_factor_list.clear()
-                        mu_list.clear()
-                        log_var_list.clear()
-                        mu_list2.clear()
-                        log_var_list2.clear()
+                    self.monitor.maybe_flush_step(step)
 
                     curr_time = time()
                     tot_delta_time = str(timedelta(seconds=curr_time - start_time))
@@ -354,15 +341,6 @@ class VAE_Trainer:
                     out_str += f"tot run time = {tot_delta_time}"
                     logging.info(out_str)
 
-            if recon_loss_list or kl_loss_list or adj_kl_factor_list:
-                pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list], f1)
-                pickle.dump([mu_list, log_var_list], f2)
-                pickle.dump([mu_list2, log_var_list2], f3)
-                loss_file.flush()
-                f1.flush()
-                f2.flush()
-                f3.flush()
-                logging.info("Flushed final partial stats buffers")
 
             logging.info("End Time %s" % (ctime()))
             delta_time = str(timedelta(seconds=time() - start_time))
@@ -377,6 +355,8 @@ class VAE_Trainer:
             logging.info(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
             logging.info(adj_ctr)
 
+        finally:
+            self.monitor.close()
 
     #############################################################
 
