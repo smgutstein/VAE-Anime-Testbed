@@ -3,7 +3,6 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
-import shutil
 import sys
 
 import os
@@ -19,14 +18,12 @@ from time import time, ctime
 from VAE_Anime_Analysis import AnalyzeResults
 from VAE_Anime_Config import TrainerConfig
 from VAE_Anime_Datasets import Datasets
+from VAE_Anime_ExperimentRun import ExperimentRun
 from VAE_Anime_Full_Model import VAE_Model
 
 
 from utils import DeltaGenerator
 from utils import delt_mul, delt_div
-from utils import get_git_hash
-from utils import get_next_experiment_dir
-from utils import load_and_validate_config
 from utils import set_all_seeds
 from utils import setup_logging
 from utils import sign
@@ -52,38 +49,16 @@ class VAE_Trainer:
         set_all_seeds(self.cfg.seed, deterministic=self.cfg.deterministic)
         logging.info(f"Using random seed {self.cfg.seed} (deterministic={self.cfg.deterministic})")
 
-        # Set the output directory for this experiment
-        self.curr_expt, self.output_dir = get_next_experiment_dir(self.cfg.parent_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        shutil.copy(self.config_file, self.output_dir / "config.ini")
-        logging.info(f"Storing Expt {self.curr_expt} in {self.output_dir}")
+        # Set up experiment/run artifacts
+        self.run = ExperimentRun.create(self.cfg)
+        self.curr_expt = self.run.expt_num
+        self.output_dir = self.run.output_dir
+        self.raw_image_dir = self.run.raw_image_dir
+        self.stats_dir = self.run.stats_dir
+        self.movies_dir = self.run.movies_dir
+        self.model_info_dir = self.run.model_info_dir
 
-
-        # Record the git hash used for this run, along with
-        # the current branch, last commit comment & uncommitted changes
-        # in the Notes.txt file in the output directory
-        with open(self.output_dir / Path("Notes.txt"), 'w') as f:
-            hash_str = get_git_hash()
-            f.write("Git Hash: \n")
-            f.write(hash_str)
-            f.write("\n")   
-            f.write(f"Random Seed: {self.cfg.seed}\n")
-            f.write(f"Deterministic TF Ops: {self.cfg.deterministic}\n")
-
-        # Set up the output directories
-        self.raw_image_dir = self.output_dir / "raw_images"
-        self.raw_image_dir.mkdir(parents=True, exist_ok=True)
-
-        self.stats_dir = self.output_dir / "stats"  
-        self.stats_dir.mkdir(parents=True, exist_ok=True)   
-
-        self.movies_dir = self.output_dir / "movies"
-        self.movies_dir.mkdir(parents=True, exist_ok=True)
-
-        # Initialize the VAE model
-        self.model_info_dir = self.output_dir / "model_info"
-        self.model_info_dir.mkdir(parents=True, exist_ok=True)
         self.vae = VAE_Model(
             enc_input_shape=(self.cfg.image_size, self.cfg.image_size, 3),
             latent_dim=self.cfg.latent_dim,
@@ -453,12 +428,6 @@ if __name__ == "__main__":
     parser.add_argument("--log", default="INFO", help="Logging level")
 
     args = parser.parse_args()
-    try:
-        config = load_and_validate_config(args.config_file)
-    except Exception as e:
-        logging.critical(f"Invalid config file: {e}")
-        sys.exit(1)
-
     setup_logging(args.log)
 
     vae = VAE_Trainer(args.config_file)
