@@ -38,7 +38,6 @@ class VAE_Trainer:
         
         # Load typed training params from config file
         self.cfg = TrainerConfig.from_file(config_file)
-        self.config_file = str(self.cfg.config_file)
 
         # Make run randomness explicit and repeatable
         set_all_seeds(self.cfg.seed, deterministic=self.cfg.deterministic)
@@ -229,7 +228,7 @@ class VAE_Trainer:
 
 
     ###########################################################
-    def train_loop(self, running_window=20):
+    def train_loop(self):
 
         # Set Timing Parameters
         start_time = time()
