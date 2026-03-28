@@ -49,12 +49,18 @@ class Datasets():
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def set_data_params(self, 
-                        batch_size = 1500,
-                        image_size = 64):
+                        batch_size=1500,
+                        image_size=64,
+                        val_split=0.2,
+                        shuffle_buffer=1000,
+                        train_drop_remainder=True):
         '''Sets the batch size and 
         the desired size of square images for the dataset.'''
         self.batch_size = batch_size
         self.image_size = image_size
+        self.val_split = val_split
+        self.shuffle_buffer = shuffle_buffer
+        self.train_drop_remainder = train_drop_remainder
         self.data_params_set = True
 
     def download_data(self):
@@ -155,9 +161,9 @@ class Datasets():
             rng = random.Random(self.seed)
             rng.shuffle(paths)
 
-        # split the paths list into to training (80%) and validation sets(20%).
+        # split the paths list into training and validation sets.
         paths_len = len(paths)
-        train_paths_len = int(paths_len * 0.8)
+        train_paths_len = int(paths_len * (1 - self.val_split))
 
         train_paths = paths[:train_paths_len]
         val_paths = paths[train_paths_len:]
@@ -185,10 +191,14 @@ class Datasets():
         training_dataset = tf.data.Dataset.from_tensor_slices(train_files)
         training_dataset = training_dataset.map(map_image, 
                                                 num_parallel_calls=tf.data.AUTOTUNE)
-        training_dataset = training_dataset.shuffle(1000,seed=self.seed,
-                                                    reshuffle_each_iteration=True).batch(
-                                                    self.batch_size,
-                                                    drop_remainder=True).prefetch(tf.data.AUTOTUNE)
+        training_dataset = training_dataset.shuffle(
+            self.shuffle_buffer,
+            seed=self.seed,
+            reshuffle_each_iteration=True,
+        ).batch(
+            self.batch_size,
+            drop_remainder=self.train_drop_remainder,
+        ).prefetch(tf.data.AUTOTUNE)
 
 
         # load the validation image paths into tensors and create batches

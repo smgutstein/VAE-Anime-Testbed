@@ -31,13 +31,17 @@ class Sampling(tf.keras.layers.Layer):
 class VAE_Encoder:
     def __init__(self, 
                  enc_input_shape=(64,64,3), 
-                 latent_dim=512, 
+                 latent_dim=512,
+                 base_filters=32,
+                 filter_factors=(1, 2, 4),
+                 encode_dense_units=1024,
+                 kernel_size=3,
                  output_dir="scratch_output"):
         self.enc_input_shape = enc_input_shape
-        self.base_filters = 32
-        self.filter_factors = [1,2,4]
-        self.encode_dense_units = 1024
-        self.k_size = 3
+        self.base_filters = base_filters
+        self.filter_factors = list(filter_factors)
+        self.encode_dense_units = encode_dense_units
+        self.k_size = kernel_size
         self.latent_dim = latent_dim
         self.output_dir = Path(output_dir)
         self.encoder_net = None
@@ -130,7 +134,11 @@ if __name__ == '__main__':
     
     setup_logging()
     encoder = VAE_Encoder(enc_input_shape=(64,64,3,), 
-                          latent_dim=512)
+                          latent_dim=512,
+                          base_filters=32,
+                          filter_factors=(1, 2, 4),
+                          encode_dense_units=1024,
+                          kernel_size=3)
     encoder.set_encoder_model()
     encoder.show_model()
     enc_output_shape = tuple(encoder.encoder_net.get_layer('encoder_flatten').input.shape)

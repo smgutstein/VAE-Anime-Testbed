@@ -87,12 +87,26 @@ class VAE_Trainer:
         # Initialize the VAE model
         self.model_info_dir = self.output_dir / "model_info"
         self.model_info_dir.mkdir(parents=True, exist_ok=True)
-        self.vae = VAE_Model(output_dir=self.model_info_dir)
+        self.vae = VAE_Model(
+            enc_input_shape=(self.image_size, self.image_size, 3),
+            latent_dim=self.latent_dim,
+            base_filters=self.base_filters,
+            filter_factors=self.filter_factors,
+            encode_dense_units=self.encode_dense_units,
+            kernel_size=self.kernel_size,
+            output_dir=self.model_info_dir,
+        )
 
         # Initialize the Datasets class
         self.data = Datasets(self.output_dir, seed=self.seed, 
                              data_dir=self.data_dir)
-        self.data.set_data_params()
+        self.data.set_data_params(
+            batch_size=self.batch_size,
+            image_size=self.image_size,
+            val_split=self.val_split,
+            shuffle_buffer=self.shuffle_buffer,
+            train_drop_remainder=self.train_drop_remainder,
+        )
         self.data.download_data()
         self.data.make_train_and_validation_sets()
 
@@ -126,6 +140,46 @@ class VAE_Trainer:
         self.running_window = int(self.config.get('Training_Parameters', 'running_window'))
         self.parent_dir = get_parent_dir(self.config)
         self.data_dir = get_data_dir(self.config)
+
+        self.batch_size = int(self.config.get('Data_Parameters', 'batch_size'))
+        self.image_size = int(self.config.get('Data_Parameters', 'image_size'))
+        self.val_split = float(self.config.get('Data_Parameters', 'val_split'))
+        self.shuffle_buffer = int(self.config.get('Data_Parameters', 'shuffle_buffer'))
+        self.train_drop_remainder = parse_bool(
+            self.config.get('Data_Parameters', 'train_drop_remainder'),
+            'train_drop_remainder'
+        )
+
+        self.latent_dim = int(self.config.get('Model_Parameters', 'latent_dim'))
+        self.base_filters = int(self.config.get('Model_Parameters', 'base_filters'))
+        self.filter_factors = [
+            int(x.strip()) for x in self.config.get('Model_Parameters', 'filter_factors').split(',')
+        ]
+        if len(self.filter_factors) != 3:
+            raise ValueError(
+                "Model_Parameters.filter_factors must contain exactly 3 integers "
+                "because the current encoder/decoder architecture has exactly 3 "
+                "convolution stages."
+            )
+        
+        self.encode_dense_units = int(self.config.get('Model_Parameters', 'encode_dense_units'))
+        self.kernel_size = int(self.config.get('Model_Parameters', 'kernel_size'))
+
+        self.snapshot_every = int(self.config.get('Monitoring_Parameters', 'snapshot_every'))
+        self.train_preview_count = int(self.config.get('Monitoring_Parameters', 'train_preview_count'))
+        self.valid_preview_count = int(self.config.get('Monitoring_Parameters', 'valid_preview_count'))
+        self.take_initial_snapshot = parse_bool(
+            self.config.get('Monitoring_Parameters', 'take_initial_snapshot'),
+            'take_initial_snapshot'
+        )
+        self.run_analysis = parse_bool(
+            self.config.get('Monitoring_Parameters', 'run_analysis'),
+            'run_analysis'
+        )
+        self.make_mu_log_var_movies = parse_bool(
+            self.config.get('Monitoring_Parameters', 'make_mu_log_var_movies'),
+            'make_mu_log_var_movies'
+        )
 
         # Reproducibility parameters are optional.
         # Defaults make runs repeatable even when older config files omit them.
@@ -382,7 +436,7 @@ class VAE_Trainer:
                     loss_file.write(f"{max_kl_adj_factor } {min_kl_adj_factor } {len(self.kl_adj_factor_queue)}\n")
 
                     # Logging + metrics
-                    if step % 10 == 0:
+                    if step % self.snapshot_every == 0:
                         self.snapshot_vae_behavior(epoch, step, curr_loss_recon, curr_loss_kl)
 
                     recon_loss_list.append(curr_loss_recon)
@@ -403,7 +457,7 @@ class VAE_Trainer:
                     self.loss_metric_recon(loss_recon)
                     self.loss_metric_kl(loss_kl)
 
-                    if step % 10 == 0:
+                    if step % self.snapshot_every == 0:
                         pickle.dump([recon_loss_list, kl_loss_list, adj_kl_factor_list], f1)
                         pickle.dump([mu_list, log_var_list], f2)
                         pickle.dump([mu_list2, log_var_list2], f3)
@@ -471,19 +525,19 @@ if __name__ == "__main__":
 
     vae = VAE_Trainer(args.config_file)
     vae.vae.show_model()
-    vae.data.display_sample_data('t', 25)
-    vae.data.display_sample_data('v', 18)
-    vae.snapshot_vae_behavior()
+    vae.data.display_sample_data('t', vae.train_preview_count)
+    vae.data.display_sample_data('v', vae.valid_preview_count)
+    if vae.take_initial_snapshot:
+        vae.snapshot_vae_behavior()
     vae.train_loop()
 
-    logging.info("Starting to analyze results....")
-    ar = AnalyzeResults(args.config_file, vae.curr_expt)
-    ar.make_singleton_graphs()
-    ar.make_images_movie()
-    ar.make_pareto_curve_graph()
-    ar.make_paretoish_movie()
-    ar.make_mu_log_var_movie(log_var_graph=True)
-    ar.make_mu_log_var_movie(log_var_graph=False)
-
-    #Note: Stopped making mu & log var movies 
-    #since they're not that interesting & take too long
+    if vae.run_analysis:
+        logging.info("Starting to analyze results....")
+        ar = AnalyzeResults(args.config_file, vae.curr_expt)
+        ar.make_singleton_graphs()
+        ar.make_images_movie()
+        ar.make_pareto_curve_graph()
+        ar.make_paretoish_movie()
+        if vae.make_mu_log_var_movies:
+            ar.make_mu_log_var_movie(log_var_graph=True)
+            ar.make_mu_log_var_movie(log_var_graph=False)

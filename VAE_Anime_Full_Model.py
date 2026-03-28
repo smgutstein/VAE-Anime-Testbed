@@ -12,11 +12,20 @@ from utils import setup_logging
 class VAE_Model():
     '''Create a full VAE model with encoder, decoder, and VAE network.'''
     def __init__(self, enc_input_shape=(64,64,3,), 
-                latent_dim=512, output_dir="scratch_output"):
+                latent_dim=512,
+                base_filters=32,
+                filter_factors=(1, 2, 4),
+                encode_dense_units=1024,
+                kernel_size=3,
+                output_dir="scratch_output"):
         self.enc_input_shape = enc_input_shape
 
-        # Set the latent dimension and output directory
+        # Set model parameters and output directory
         self.latent_dim = latent_dim
+        self.base_filters = base_filters
+        self.filter_factors = list(filter_factors)
+        self.encode_dense_units = encode_dense_units
+        self.kernel_size = kernel_size
         self.output_dir = Path(output_dir)
 
         # Initialize the encoder, decoder, and VAE
@@ -27,8 +36,15 @@ class VAE_Model():
 
     def init_encoder(self):
         # Create a new VAE_Encoder object and set the encoder model
-        self.encoder = VAE_Encoder(self.enc_input_shape, 
-                                   self.latent_dim, self.output_dir)
+        self.encoder = VAE_Encoder(
+            self.enc_input_shape,
+            self.latent_dim,
+            self.base_filters,
+            self.filter_factors,
+            self.encode_dense_units,
+            self.kernel_size,
+            self.output_dir,
+        )
         self.encoder.set_encoder_model()
 
     def init_decoder(self):
@@ -40,7 +56,14 @@ class VAE_Model():
         # The input shape of the encoder's encoder_flatten layer is 
         # the shape the decoder needs to recover from flattened data
         enc_output_shape = tuple(self.encoder.encoder_net.get_layer('encoder_flatten').input.shape)
-        self.decoder = VAE_Decoder(enc_output_shape, self.latent_dim, self.output_dir)
+        self.decoder = VAE_Decoder(
+            enc_output_shape,
+            self.latent_dim,
+            self.base_filters,
+            self.filter_factors,
+            self.kernel_size,
+            self.output_dir,
+        )
         self.decoder.set_decoder_model()
 
     def init_VAE(self):

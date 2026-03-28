@@ -9,12 +9,15 @@ from utils import setup_logging
 class VAE_Decoder:
     def __init__(self, 
                  dec_input_shape, 
-                 latent_dim, 
+                 latent_dim,
+                 base_filters=32,
+                 filter_factors=(1, 2, 4),
+                 kernel_size=3,
                  output_dir="scratch_output"):
         self.dec_input_shape = dec_input_shape
-        self.base_filters = 32
-        self.filter_factors = [1,2,4]
-        self.k_size = 3
+        self.base_filters = base_filters
+        self.filter_factors = list(filter_factors)
+        self.k_size = kernel_size
         self.latent_dim = latent_dim
         self.output_dir = Path(output_dir)
         self.decoder_net = None
@@ -98,6 +101,9 @@ if __name__ == '__main__':
     
     setup_logging()
     decoder = VAE_Decoder(dec_input_shape=(None, 8, 8, 128), 
-                          latent_dim=512)
+                          latent_dim=512,
+                          base_filters=32,
+                          filter_factors=(1, 2, 4),
+                          kernel_size=3)
     decoder.set_decoder_model()
     decoder.show_model()

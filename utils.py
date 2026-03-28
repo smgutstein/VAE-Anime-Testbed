@@ -221,7 +221,13 @@ def load_and_validate_config(config_file):
     config = configparser.ConfigParser()
     config.read(config_file)
 
-    required_sections = ["Training_Parameters", "Output_Parameters"]
+    required_sections = [
+        "Training_Parameters",
+        "Output_Parameters",
+        "Data_Parameters",
+        "Model_Parameters",
+        "Monitoring_Parameters",
+    ]
 
     for section in required_sections:
         if not config.has_section(section):
@@ -231,8 +237,30 @@ def load_and_validate_config(config_file):
     if not config.has_section("Reproducibility"):
         logging.warning("Config missing [Reproducibility]; using defaults")
 
-    if not config.has_section("Data_Parameters"):
-        logging.warning("Config missing [Data_Parameters]; using defaults")
+    required_options = {
+        "Training_Parameters": [
+            "epochs", "learning_rate", "kl_adj_factor", "kl_adj_factor_max",
+            "kl_adj_update_factor", "running_window",
+        ],
+        "Output_Parameters": ["parent_dir", "save_net"],
+        "Data_Parameters": [
+            "data_dir", "batch_size", "image_size", "val_split",
+            "shuffle_buffer", "train_drop_remainder",
+        ],
+        "Model_Parameters": [
+            "latent_dim", "base_filters", "filter_factors",
+            "encode_dense_units", "kernel_size",
+        ],
+        "Monitoring_Parameters": [
+            "snapshot_every", "train_preview_count", "valid_preview_count",
+            "take_initial_snapshot", "run_analysis", "make_mu_log_var_movies",
+        ],
+    }
+
+    for section, options in required_options.items():
+        for option in options:
+            if not config.has_option(section, option):
+                raise ValueError(f"Missing required config option: [{section}] {option}")
 
     return config
 
