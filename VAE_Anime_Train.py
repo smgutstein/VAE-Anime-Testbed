@@ -20,13 +20,10 @@ from VAE_Anime_Config import TrainerConfig
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_ExperimentRun import ExperimentRun
 from VAE_Anime_Full_Model import VAE_Model
+from VAE_Anime_KL_Controller import KLController
 
-
-from utils import DeltaGenerator
-from utils import delt_mul, delt_div
 from utils import set_all_seeds
 from utils import setup_logging
-from utils import sign
 
 
 class VAE_Trainer:
@@ -88,24 +85,18 @@ class VAE_Trainer:
 
         # Training parameters
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.cfg.learning_rate)
-        self.kl_adj_factor = self.cfg.kl_adj_factor
-        self.kl_adj_factor_max = self.cfg.kl_adj_factor_max
-        self.kl_adj_update_factor = self.cfg.kl_adj_update_factor
-        self.kl_adj_factor_queue = deque(maxlen=self.cfg.running_window)
-        self.kl_adj_factor_delta_queue = deque(maxlen=self.cfg.running_window)
-
-
-
-        # Initialize Delta Generator 
-        #   Creates increment & decrement functions 
-        #   that multiply/divide by  1+self.kl_adj_update_factor
-        self.delta_gen = DeltaGenerator(delt_mul, delt_div, self.kl_adj_update_factor)
-        self.inc = self.delta_gen.inc_func 
-        self.dec = self.delta_gen.dec_func
-
-        self.kl_adj_tensor = tf.Variable(self.kl_adj_factor, dtype=tf.float32, trainable=False)
-
-            
+        self.kl_controller = KLController(
+            initial_factor=self.cfg.kl_adj_factor,
+            max_factor=self.cfg.kl_adj_factor_max,
+            update_factor=self.cfg.kl_adj_update_factor,
+            running_window=self.cfg.running_window,
+        )
+        self.kl_adj_tensor = tf.Variable(
+            self.kl_controller.current_value(),
+            dtype=tf.float32,
+            trainable=False,
+        )
+          
 
     def snapshot_vae_behavior (self, epoch=0, step=0, 
                                recon_loss=0, kl_loss=0):
@@ -242,12 +233,8 @@ class VAE_Trainer:
         start_time = time()
         logging.info("Start Time: %s" % (ctime()))
 
-        # Temp variable to see if I really do adjust the update factor
-        adj_ctr = [(0, 0, self.kl_adj_update_factor)]
-
-        # Initialize performance trackers
-        prev_loss_recon = np.inf
-        prev_loss_kl = np.inf
+        # Track moments when the controller shrinks its update factor
+        adj_ctr = [(0, 0, self.kl_controller.current_update_factor())]
 
         # Lists of values for later plottting & diagnostics
         recon_loss_list = []
@@ -280,8 +267,9 @@ class VAE_Trainer:
 
                 # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):
-                    # Convert kl_adj_factor to tensor for tf.function
-                    self.kl_adj_tensor.assign(self.kl_adj_factor)
+
+                    # Convert current KL factor to tensor for tf.function
+                    self.kl_adj_tensor.assign(self.kl_controller.current_value())
 
                     # Call static train_step
                     loss_recon, loss_kl, mu, log_var, grads = self.train_step(
@@ -304,49 +292,23 @@ class VAE_Trainer:
                         import pdb
                         pdb.set_trace()
  
-                    # KL balancing
-                    if curr_loss_recon >= prev_loss_recon:
-                        # Recon loss is getting worse, decrease emphasis on KL Loss
-                        self.kl_adj_factor = self.dec(self.kl_adj_factor)
-                        adj_str = "-"
-                    else:
-                        # If recon loss improves, but kl didn't
-                        self.kl_adj_factor = self.inc(self.kl_adj_factor)
-                        adj_str = "+"
+                    update_info = self.kl_controller.update(curr_loss_recon, curr_loss_kl)
+                    adj_str = update_info["adj_str"]
+                    num_maxes = update_info["num_maxes"]
+                    test1 = update_info["test1"]
+                    test2 = update_info["test2"]
+                    max_kl_adj_factor = update_info["max_factor_seen"]
+                    min_kl_adj_factor = update_info["min_factor_seen"]
+                    curr_kl_adj_factor = update_info["factor"]
 
-                    # Cap KL Loss Factor - This is tragically arbitrary
-                    self.kl_adj_factor = min(self.kl_adj_factor, self.kl_adj_factor_max)
-
-                    self.kl_adj_factor_queue.append(self.kl_adj_factor)
-                    if len(self.kl_adj_factor_queue) >= 2:
-                        delta = sign(self.kl_adj_factor_queue[-1] - self.kl_adj_factor_queue[-2])
-                        self.kl_adj_factor_delta_queue.append(delta)
-
-                    # Check if kl_adj_factor is bouncing too much at top of range
-                    # If so, decrease the update factor
-                    num_maxes = sum([1 for x in self.kl_adj_factor_queue if x == self.kl_adj_factor_max])
-                    test1 = num_maxes > 0.4 * len(self.kl_adj_factor_queue)
-                    test2 = num_maxes < 0.6 * len(self.kl_adj_factor_queue)
-
-                    if test1 and test2:
-                        self.kl_adj_update_factor *= 0.9
-                        self.delta_gen = DeltaGenerator(delt_mul, delt_div, self.kl_adj_update_factor)
-                        self.inc = self.delta_gen.inc_func
-                        self.dec = self.delta_gen.dec_func
-                        self.kl_adj_factor_queue.clear()
-                        self.kl_adj_factor_queue.append(self.kl_adj_factor)
-                        self.kl_adj_factor_delta_queue.clear()
-                        adj_ctr.append((epoch, step, self.kl_adj_update_factor))
-
-                    prev_loss_recon = curr_loss_recon
-                    prev_loss_kl = curr_loss_kl
+                    if update_info["update_factor_changed"]:
+                        adj_ctr.append((epoch, step, update_info["update_factor"]))
 
                     # Calculate Total Effective Loss
-                    max_kl_adj_factor = max(self.kl_adj_factor_queue)
-                    min_kl_adj_factor  = min(self.kl_adj_factor_queue)
-                    loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4e} -- {self.kl_adj_factor:.4e}  ")
+
+                    loss_file.write(f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4e} -- {curr_kl_adj_factor:.4e}  ")
                     loss_file.write(f"{test1} {test2} {num_maxes} ")
-                    loss_file.write(f"{max_kl_adj_factor } {min_kl_adj_factor } {len(self.kl_adj_factor_queue)}\n")
+                    loss_file.write(f"{max_kl_adj_factor } {min_kl_adj_factor } {update_info['window_len']}\n")
 
                     # Logging + metrics
                     if step % self.cfg.snapshot_every == 0:
@@ -354,7 +316,7 @@ class VAE_Trainer:
 
                     recon_loss_list.append(curr_loss_recon)
                     kl_loss_list.append(curr_loss_kl)
-                    adj_kl_factor_list.append(self.kl_adj_factor)
+                    adj_kl_factor_list.append(curr_kl_adj_factor)
 
                     gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
                     grad_list.append(gl_mags)
@@ -388,7 +350,7 @@ class VAE_Trainer:
                     out_str = f"Epoch: {epoch} step: {step} "
                     out_str += f"recon loss = {curr_loss_recon:.4f} "
                     out_str += f"kl_loss = {curr_loss_kl:.4e} "
-                    out_str += f"{adj_str} kl_adj_factor = {self.kl_adj_factor:.4e} "
+                    out_str += f"{adj_str} kl_adj_factor = {curr_kl_adj_factor:.4e} "
                     out_str += f"tot run time = {tot_delta_time}"
                     logging.info(out_str)
 
