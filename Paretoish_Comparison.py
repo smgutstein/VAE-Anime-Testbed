@@ -3,31 +3,15 @@ import matplotlib.pyplot as plt
 
 from pathlib import Path
 
+from VAE_Anime_ResultsIO import read_loss_file_points_io
 from VAE_ParetoFront import ParetoFront
+
 from utils import is_config_file
 from utils import get_experiment_dir
 from utils import read_config_file
 
 
 
-def get_datapts(expt_file):
-    '''Get the recon & kl loss values from the experiment file.'''
-    with open(expt_file,'r') as f:
-        fl = f.readlines()
-
-    recon_pts=[]
-    kl_pts = []
-    for curr_line in fl[1:]:
-        data = [x.strip() for x in curr_line.split('--')]
-        if len(data) >= 4:
-            recon_pts.append(float(data[2]))
-            kl_pts.append(float(data[3]))
-        else:
-            print(f"Last line of losses_file incomplete: {data}")
-            break
- 
-
-    return recon_pts, kl_pts
 
 def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):
     if expt_dir is not None:
@@ -169,8 +153,8 @@ if __name__ == "__main__":
     expt2_file = resolve_losses_file(expt2_dir)
 
     # Get the data points
-    recon_pts1, kl_pts1 = get_datapts(expt1_file)
-    recon_pts2, kl_pts2 = get_datapts(expt2_file)
+    _, recon_pts1, kl_pts1, _ = read_loss_file_points_io(expt1_file)
+    _, recon_pts2, kl_pts2, _ = read_loss_file_points_io(expt2_file)
 
     output_dir = Path(args.output_dir) if args.output_dir \
                                        else Path(parent_dir) / Path('pareto_comps')

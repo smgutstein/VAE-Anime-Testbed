@@ -1,10 +1,8 @@
 import argparse
 import imageio.v2 as imageio
 import logging
-import math
 import matplotlib.pyplot as plt
 import numpy as np
-import pickle
 import re
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from pathlib import Path
@@ -16,6 +14,10 @@ from utils import get_latest_experiment_dir
 from utils import is_config_file
 from utils import read_config_file
 from utils import setup_logging
+
+from VAE_Anime_ResultsIO import read_loss_file_points_io
+from VAE_Anime_ResultsIO import read_loss_lists
+from VAE_Anime_ResultsIO import read_mu_log_var_lists
 
 from VAE_ParetoFront import ParetoFront
 
@@ -96,60 +98,8 @@ class AnalyzeResults():
         logging.info(f"Saved {self.movies_dir / movie_name}")
 
     def get_recon_kl_results(self):
-        recon_loss_list=[]
-        kl_loss_list=[]
-        adj_kl_factor_list=[]
-  
-        try:
-            loss_lists_file = self.require_artifact(self.stats_dir / Path('loss_lists.pkl'), 'loss list pickle')
-            with open(loss_lists_file,'rb') as f:
-                while True:
-                    try:
-                        # Load the next object from the pickle file
-                        data = pickle.load(f)
-                        
-                        # Check if the loaded data is a list
-                        if isinstance(data, list):
-                            # Process the list data here 
-                            recon_loss_list += data[0]
-                            kl_loss_list += data[1]
-                            adj_kl_factor_list += data[2]
-                        else:
-                            # Handle unexpected data types or structures
-                            logging.info("Unexpected data:", data)
-                    
-                    except EOFError:
-                        # Reached end of file (no more objects to load)
-                        break
-                    
-                    except Exception as e:
-                        # Handle other exceptions (e.g., pickle decode error)
-                        logging.error("Error loading data:", e)
-
-        except FileNotFoundError as e:
-            logging.critical(str(e))
-
-        except Exception as e:
-            logging.error("Error:", e)
-        
-
-        # Remove nan and inf values
-        recon_loss_list = [x for x in recon_loss_list 
-                           if ((not math.isnan(x)) and 
-                               (not math.isinf(x))) ]
-        kl_loss_list = [x for x in kl_loss_list 
-                        if ((not math.isnan(x)) and
-                            (not math.isinf(x))) ]
-        adj_kl_factor_list = [x for x in adj_kl_factor_list 
-                              if ((not math.isnan(x)) and
-                                  (not math.isinf(x))) ]
-        
-        temp = min(len(recon_loss_list), len(kl_loss_list), len(adj_kl_factor_list))
-        recon_loss_list = recon_loss_list[:temp]
-        kl_loss_list = kl_loss_list[:temp]
-        adj_kl_factor_list = adj_kl_factor_list[:temp]
-
-        return recon_loss_list, kl_loss_list, adj_kl_factor_list    
+        return read_loss_lists(self.stats_dir)
+ 
     
     def read_loss_file_points(self):
         """Read recon/KL points from stats/losses_file.txt.
@@ -157,24 +107,9 @@ class AnalyzeResults():
         Returns:
             recon_pts, kl_pts
         """
-        losses_file = self.require_artifact(self.stats_dir / Path('losses_file.txt'), 'loss text file')
-        with open(losses_file, 'r') as f:
-            fl = f.readlines()
-
-        # Remove lines with nan or inf
-        fl = [x for x in fl if ('nan' not in x) and ('inf' not in x)]
-
-        recon_pts = []
-        kl_pts = []
-        for curr_line in fl[1:]:  # Skip header
-            data = [x.strip() for x in curr_line.split('--')]
-            if len(data) >= 4:
-                recon_pts.append(float(data[2]))
-                kl_pts.append(float(data[3]))
-            else:
-                logging.warning(f"Last line of losses_file incomplete: {data}")
-                break
-
+        fl, recon_pts, kl_pts, _ = read_loss_file_points_io(
+            self.stats_dir / Path("losses_file.txt")
+        )
         return fl, recon_pts, kl_pts
 
         
@@ -295,57 +230,7 @@ class AnalyzeResults():
         self.compare_recon_kl_losses2()
 
     def get_mu_log_var_results(self):
-        mu=[]
-        log_var=[]
-        try:
-            mu_log_var_file = self.require_artifact(
-                 self.stats_dir / Path('mu_log_var_lists.pkl'),
-                'mu/log_var pickle'
-            )
-            with open(mu_log_var_file,'rb') as f:                
-                while True:
-                    try:
-                        # Load the next object from the pickle file
-                        data = pickle.load(f)
-                        
-                        # Check if the loaded data is a list
-                        if isinstance(data, list):
-                            # Process the list data here
-                            mu += data[0]
-                            log_var += data[1]
-                        else:
-                            # Handle unexpected data types or structures
-                            logging.info("Unexpected data:", data)
-                    
-                    except EOFError:
-                        # Reached end of file (no more objects to load)
-                        break
-                    
-                    except Exception as e:
-                        # Handle other exceptions (e.g., pickle decode error)
-                        logging.error("Error loading data:", e)  
-
-
-        except FileNotFoundError:
-            logging.critical(f"File not found: {self.stats_dir / Path('mu_log_var_lists.pkl')}")
-        
-        except Exception as e:
-            logging.error("Error:", e)
-
-
-        # Remove nan and inf values
-        log_var =[x for x in log_var 
-                  if (not np.isnan(x.numpy()).any()) and 
-                  (not np.isinf(x.numpy()).any())]
-        mu =[x for x in mu 
-             if (not np.isnan(x.numpy()).any()) and 
-             (not np.isinf(x.numpy()).any())]
-        
-        temp = min(len(log_var), len(mu))
-        log_var = log_var[:temp]
-        mu = mu[:temp]
-
-        return mu, log_var
+        return read_mu_log_var_lists(self.stats_dir)
 
     def make_final_mu_log_var_graphs(self):
     
