@@ -17,7 +17,7 @@ from VAE_Anime_Config import TrainerConfig
 from VAE_Anime_Datasets import Datasets
 from VAE_Anime_ExperimentRun import ExperimentRun
 from VAE_Anime_Full_Model import VAE_Model
-from VAE_Anime_KL_Controller import KLController
+from VAE_Anime_LossPolicy import build_loss_policy
 from VAE_Anime_Training_Monitor import TrainingMonitor
 
 from utils import set_all_seeds
@@ -28,8 +28,6 @@ class VAE_Trainer:
     '''Class to train the VAE model on the anime faces dataset'''
 
     # Initialize the loss metrics
-    loss_metric_recon = tf.keras.metrics.Mean()
-    loss_metric_kl = tf.keras.metrics.Mean()
     mse_loss = tf.keras.losses.MeanSquaredError()
 
     def __init__(self, config_file="config.ini"):
@@ -82,17 +80,16 @@ class VAE_Trainer:
 
         # Training parameters
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.cfg.learning_rate)
-        self.kl_controller = KLController(
-            initial_factor=self.cfg.kl_adj_factor,
-            max_factor=self.cfg.kl_adj_factor_max,
-            update_factor=self.cfg.kl_adj_update_factor,
-            running_window=self.cfg.running_window,
-        )
+
+        self.loss_policy = build_loss_policy(self.cfg)
         self.kl_adj_tensor = tf.Variable(
-            self.kl_controller.current_value(),
+            self.loss_policy.current_value(),
             dtype=tf.float32,
             trainable=False,
         )
+
+        logging.info(f"Using loss policy: {self.loss_policy.policy_name}")
+
 
         self.monitor = TrainingMonitor(
             stats_dir=self.stats_dir,
@@ -223,7 +220,7 @@ class VAE_Trainer:
 
         grads = tape.gradient(loss_tot, model.trainable_weights)
         optimizer.apply_gradients(zip(grads, model.trainable_weights))
-        return loss_recon, loss_kl, mu, log_var, grads
+        return loss_recon, loss_kl, mu, log_var
 
 
 
@@ -235,8 +232,7 @@ class VAE_Trainer:
         logging.info("Start Time: %s" % (ctime()))
 
         # Track moments when the controller shrinks its update factor
-        adj_ctr = [(0, 0, self.kl_controller.current_update_factor())]
-        grad_list = []
+        adj_ctr = [(0, 0, self.loss_policy.current_update_factor())]
 
         self.monitor.open()
         try:
@@ -256,10 +252,10 @@ class VAE_Trainer:
                 for step, x_batch_train in enumerate(self.data.training_dataset):
 
                     # Convert current KL factor to tensor for tf.function
-                    self.kl_adj_tensor.assign(self.kl_controller.current_value())
+                    self.kl_adj_tensor.assign(self.loss_policy.current_value())
 
                     # Call static train_step
-                    loss_recon, loss_kl, mu, log_var, grads = self.train_step(
+                    loss_recon, loss_kl, mu, log_var = self.train_step(
                         x_batch_train,
                         self.kl_adj_tensor,
                         self.vae, 
@@ -279,7 +275,7 @@ class VAE_Trainer:
                         import pdb
                         pdb.set_trace()
  
-                    update_info = self.kl_controller.update(curr_loss_recon, curr_loss_kl)
+                    update_info = self.loss_policy.update(curr_loss_recon, curr_loss_kl)
                     adj_str = update_info["adj_str"]
                     num_maxes = update_info["num_maxes"]
                     test1 = update_info["test1"]
@@ -316,9 +312,6 @@ class VAE_Trainer:
                         curr_kl_adj_factor=curr_kl_adj_factor,
                     )
 
-                    gl_mags = [np.max(np.abs(x.numpy())) for x in grads]
-                    grad_list.append(gl_mags)
-
                     self.monitor.record_latent_stats(
                         mu_mean=tf.reduce_mean(mu, 0),
                         log_var_mean=tf.reduce_mean(log_var, 0),
@@ -326,8 +319,6 @@ class VAE_Trainer:
                         log_var_var=tf.math.reduce_variance(log_var, 0),
                     )
 
-                    self.loss_metric_recon(loss_recon)
-                    self.loss_metric_kl(loss_kl)
 
                     self.monitor.maybe_flush_step(step)
 

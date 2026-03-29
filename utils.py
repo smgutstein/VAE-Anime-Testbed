@@ -239,7 +239,8 @@ def load_and_validate_config(config_file):
 
     required_options = {
         "Training_Parameters": [
-            "epochs", "learning_rate", "kl_adj_factor", "kl_adj_factor_max",
+            "epochs", "learning_rate",  "loss_policy",
+            "kl_adj_factor", "kl_adj_factor_max",
             "kl_adj_update_factor", "running_window",
         ],
         "Output_Parameters": ["parent_dir", "save_net"],
