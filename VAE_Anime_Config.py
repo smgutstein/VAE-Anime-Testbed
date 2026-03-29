@@ -18,6 +18,7 @@ class TrainerConfig:
     epochs: int
     learning_rate: float
     loss_policy: str
+    beta: float
     kl_adj_factor: float
     kl_adj_factor_max: float
     kl_adj_update_factor: float
@@ -79,6 +80,7 @@ class TrainerConfig:
             epochs=config.getint("Training_Parameters", "epochs"),
             learning_rate=config.getfloat("Training_Parameters", "learning_rate"),
             loss_policy=config.get("Training_Parameters", "loss_policy"),
+            beta=config.getfloat("Training_Parameters", "beta"),
             kl_adj_factor=config.getfloat("Training_Parameters", "kl_adj_factor"),
             kl_adj_factor_max=config.getfloat("Training_Parameters", "kl_adj_factor_max"),
             kl_adj_update_factor=config.getfloat("Training_Parameters", "kl_adj_update_factor"),
@@ -136,8 +138,11 @@ class TrainerConfig:
             raise ValueError("epochs must be > 0")
         if self.learning_rate <= 0:
             raise ValueError("learning_rate must be > 0")
-        if self.loss_policy not in {"adaptive_kl"}:
-            raise ValueError("Training_Parameters.loss_policy must currently be 'adaptive_kl'")
+        if self.loss_policy not in {"adaptive_kl", "fixed_beta"}:
+            raise ValueError("loss_policy must be one of: adaptive_kl, fixed_beta")
+        if self.beta < 0:
+            raise ValueError("beta must be >= 0")
+
         if self.kl_adj_factor < 0:
             raise ValueError("kl_adj_factor must be >= 0")
         if self.kl_adj_factor_max < self.kl_adj_factor:

@@ -159,9 +159,9 @@ def build_loss_policy(cfg):
             running_window=cfg.running_window,
         )
 
-    #if cfg.loss_policy == "fixed_beta":
-    #    return FixedBetaLossPolicy(
-    #        kl_adj_factor=cfg.beta,
-    #    )
+    if cfg.loss_policy == "fixed_beta":
+        return FixedBetaLossPolicy(
+            kl_adj_factor=cfg.beta,
+        )
 
     raise ValueError(f"Unknown loss_policy: {cfg.loss_policy}")

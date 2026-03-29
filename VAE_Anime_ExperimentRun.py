@@ -29,6 +29,7 @@ class ExperimentRun:
             f.write("Git Hash: \n")
             f.write(hash_str)
             f.write("\n")
+            f.write(f"Loss Policy: {cfg.loss_policy}\n")
             f.write(f"Random Seed: {cfg.seed}\n")
             f.write(f"Deterministic TF Ops: {cfg.deterministic}\n")
 
