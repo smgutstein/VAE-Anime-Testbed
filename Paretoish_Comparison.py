@@ -127,7 +127,7 @@ if __name__ == "__main__":
     parser.add_argument('--expt2', type=int, help='Number of second experiment')
     parser.add_argument('--expt1_dir', type=str, help='Path to first experiment directory', default = None)
     parser.add_argument('--expt2_dir', type=str, help='Path to second experiment directory', default = None)
-    parser.add_argument('--output_dir', type=str, help='Directory for comparison outputs', default = "pareto_comps")
+    parser.add_argument('--output_dir', type=str, help='Directory for comparison outputs', default = None)
 
     parser.add_argument('-c', '--config_file', type=str, nargs='?',
                         default='config.ini', help='Config file')
