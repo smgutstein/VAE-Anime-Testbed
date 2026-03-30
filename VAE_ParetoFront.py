@@ -1,4 +1,5 @@
 import bisect
+import numpy as np
 
 
 class ParetoFront:
@@ -70,4 +71,4 @@ class ParetoFront:
                         new_y = lft_pt[1] + delta_yeq
                         pareto_curve[ctr] = (pareto_curve[ctr][0], new_y)
 
-            return pareto_curve
+            return np.array(pareto_curve)

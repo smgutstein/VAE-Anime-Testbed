@@ -125,26 +125,35 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
     parser.add_argument('--expt1', type=int, help='Number of first experiment')
     parser.add_argument('--expt2', type=int, help='Number of second experiment')
-    parser.add_argument('--expt1_dir', type=str, help='Path to first experiment directory')
-    parser.add_argument('--expt2_dir', type=str, help='Path to second experiment directory')
-    parser.add_argument('--output_dir', type=str, help='Directory for comparison outputs')
+    parser.add_argument('--expt1_dir', type=str, help='Path to first experiment directory', default = None)
+    parser.add_argument('--expt2_dir', type=str, help='Path to second experiment directory', default = None)
+    parser.add_argument('--output_dir', type=str, help='Directory for comparison outputs', default = "pareto_comps")
 
     parser.add_argument('-c', '--config_file', type=str, nargs='?',
                         default='config.ini', help='Config file')
 
     args = parser.parse_args()
-    e1 = args.expt1
-    e2 = args.expt2
-    e1_dir_arg = args.expt1_dir
-    e2_dir_arg = args.expt2_dir
-
-    config_file = args.config_file
 
     # Load the experiment files 
+    config_file = args.config_file
     assert is_config_file(config_file), "Invalid config file"
     config = read_config_file(config_file)
     parent_dir = Path(config.get('Output_Parameters', 'parent_dir'))
 
+
+    e1 = args.expt1
+    e2 = args.expt2
+
+    if args.expt1_dir:
+        e1_dir_arg = args.expt1_dir
+    else:
+        e1_dir_arg = parent_dir / Path(f'expt_{e1}')
+
+    if args.expt2_dir:
+        e2_dir_arg = args.expt2_dir
+    else:
+        e2_dir_arg = parent_dir / Path(f'expt_{e2}')
+        
 
     # Check if the experiment directories exist
     expt1_dir = resolve_experiment_dir(parent_dir, expt_num=e1, expt_dir=e1_dir_arg)
@@ -153,6 +162,7 @@ if __name__ == "__main__":
     expt2_file = resolve_losses_file(expt2_dir)
 
     # Get the data points
+
     _, recon_pts1, kl_pts1, _ = read_loss_file_points_io(expt1_file)
     _, recon_pts2, kl_pts2, _ = read_loss_file_points_io(expt2_file)
 
