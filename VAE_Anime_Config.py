@@ -27,6 +27,7 @@ class TrainerConfig:
     # Output
     parent_dir: Path
     save_net: bool
+    expt_name: str | None
 
     # Data
     data_dir: Path
@@ -89,6 +90,7 @@ class TrainerConfig:
             # Output
             parent_dir=get_parent_dir(config),
             save_net=parse_bool(config.get("Output_Parameters", "save_net"), "save_net"),
+            expt_name=config.get("Output_Parameters","expt_name",fallback=None),
 
             # Data
             data_dir=get_data_dir(config),

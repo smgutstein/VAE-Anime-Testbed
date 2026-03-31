@@ -11,7 +11,21 @@ from utils import get_experiment_dir
 from utils import read_config_file
 
 
+def get_experiment_label(expt_dir, fallback_label=None):
+    expt_dir = Path(expt_dir)
+    cfg_path = expt_dir / "config.ini"
 
+    if cfg_path.is_file():
+        cfg = read_config_file(cfg_path)
+        if cfg.has_option("Output_Parameters", "expt_name"):
+            name = cfg.get("Output_Parameters", "expt_name").strip()
+            if name:
+                return f"{expt_dir.name}: {name}"
+
+    if fallback_label is not None:
+        return f"{expt_dir.name}: {fallback_label}"
+
+    return expt_dir.name
 
 def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):
     if expt_dir is not None:
@@ -33,8 +47,8 @@ def resolve_losses_file(expt_dir):
     return losses_file
 
 
-def compare_graphs(expt1_num, recon_pts1, kl_pts1, 
-                   expt2_num, recon_pts2, kl_pts2,
+def compare_graphs(expt1_label, recon_pts1, kl_pts1, 
+                   expt2_label, recon_pts2, kl_pts2,
                    output_dir):
     fig, ax = plt.subplots(2)
 
@@ -44,11 +58,11 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
 
     # create a scatter plot on the axes for expt1
     sc = ax[0].scatter(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:],
-                    s=1, c='cadetblue', label=f'Expt {expt1_num}')
+                    s=1, c='cadetblue', label=f'Expt {expt1_label}')
 
     # create a scatter plot on the axes for expt2
     sc = ax[0].scatter(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:],
-                    s=1, c='indianred', label=f'Expt {expt2_num}')
+                    s=1, c='indianred', label=f'Expt {expt2_label}')
 
     # Give the plot a title and labels
     ax[0].set_title('Pareto-ish Graph')
@@ -60,11 +74,11 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
     # Now repeat in reverse order to avoid overlap confusion
     # create a scatter plot on the axes for expt2
     ax[1].scatter(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:],
-                    s=1, c='indianred', label=f'Expt {expt2_num}')
+                    s=1, c='indianred', label=expt2_label)
     
     # create a scatter plot on the axes for expt1
     ax[1].scatter(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:],
-                    s=1, c='cadetblue', label=f'Expt {expt1_num}')
+                    s=1, c='cadetblue', label=expt1_label)
 
 
     # Give the plot a title and labels
@@ -73,12 +87,12 @@ def compare_graphs(expt1_num, recon_pts1, kl_pts1,
     ax[1].set_yscale('log')
     ax[1].legend()
 
-    plt.savefig(output_dir / Path(f'Paretoish_{expt1_num}_{expt2_num}.png'))
+    plt.savefig(output_dir / Path(f'Paretoish {expt1_label}  {expt2_label}.png'))
     plt.close()
-    print(f"Saved {output_dir / Path(f'Paretoish_{expt1_num}_{expt2_num}.png')}")
+    print(f"Saved {output_dir / Path(f'Paretoish {expt1_label}  {expt2_label}.png')}")
 
-def compare_pareto_curves(expt1_num, recon_pts1, kl_pts1, 
-                          expt2_num, recon_pts2, kl_pts2,
+def compare_pareto_curves(expt1_label, recon_pts1, kl_pts1, 
+                          expt2_label, recon_pts2, kl_pts2,
                           output_dir):
     p1 = ParetoFront()
     p2 = ParetoFront()
@@ -97,12 +111,12 @@ def compare_pareto_curves(expt1_num, recon_pts1, kl_pts1,
     fig, ax = plt.subplots()
 
     ax.plot(pareto_curve1[:, 0], pareto_curve1[:, 1], 
-            color='dodgerblue', label=f'Expt {expt1_num}', linewidth=2)
+            color='dodgerblue', label=expt1_label, linewidth=2)
     ax.scatter(pareto_curve1[:, 0], pareto_curve1[:, 1], 
                    color='darkslategray', s=10)  # show curve points
     
     ax.plot(pareto_curve2[:, 0], pareto_curve2[:, 1], 
-            color='lightcoral', label=f'Expt {expt2_num}', linewidth=2)
+            color='lightcoral', label=expt2_label, linewidth=2)
     ax.scatter(pareto_curve2[:, 0], pareto_curve2[:, 1], 
                    color='maroon', s=10)  # show curve points
     
@@ -112,9 +126,9 @@ def compare_pareto_curves(expt1_num, recon_pts1, kl_pts1,
     ax.set_title('Pareto Curves')
     ax.legend()
 
-    plt.savefig(output_dir / Path(f'ParetoCurves_{expt1_num}_{expt2_num}.png'))
+    plt.savefig(output_dir / Path(f'ParetoCurves {expt1_label}  {expt2_label}.png'))
     plt.close()
-    print(f"Saved {output_dir / Path(f'ParetoCurves_{expt1_num}_{expt2_num}.png')}")
+    print(f"Saved {output_dir / Path(f'ParetoCurves {expt1_label}  {expt2_label}.png')}")
 
 
  
@@ -171,8 +185,8 @@ if __name__ == "__main__":
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    expt1_label = e1 if e1 is not None else expt1_dir.name
-    expt2_label = e2 if e2 is not None else expt2_dir.name
+    expt1_label = get_experiment_label(expt1_dir, fallback_label=e1)
+    expt2_label = get_experiment_label(expt2_dir, fallback_label=e2)
 
     compare_graphs(expt1_label, recon_pts1, kl_pts1, 
                    expt2_label, recon_pts2, kl_pts2,
