@@ -70,13 +70,13 @@ class KLController:
         self.prev_loss_kl = curr_loss_kl
 
         return {
-            "adj_str": adj_str,
-            "factor": self.kl_adj_factor,
+            "weight_direction": adj_str,
+            "kl_weight": self.kl_adj_factor,
             "num_maxes": num_maxes,
             "test1": test1,
             "test2": test2,
-            "max_factor_seen": max(self.kl_adj_factor_queue),
-            "min_factor_seen": min(self.kl_adj_factor_queue),
+            "max_kl_weight_seen": max(self.kl_adj_factor_queue),
+            "min_kl_weight_seen": min(self.kl_adj_factor_queue),
             "window_len": len(self.kl_adj_factor_queue),
             "update_factor": self.kl_adj_update_factor,
             "update_factor_changed": update_factor_changed,

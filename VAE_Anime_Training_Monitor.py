@@ -51,30 +51,32 @@ class TrainingMonitor:
     def is_snapshot_step(self, step):
         return step % self.snapshot_every == 0
 
+        
     def record_text_line(
         self,
         epoch,
         step,
         loss_recon,
         loss_kl,
-        curr_kl_adj_factor,
+        curr_kl_weight,
         test1,
         test2,
         num_maxes,
-        max_kl_adj_factor,
-        min_kl_adj_factor,
+        max_kl_weight_seen,
+        min_kl_weight_seen,
         window_len,
     ):
+
         self.loss_file.write(
             f"{epoch} -- {step} -- {loss_recon:.4f} -- {loss_kl:.4e} -- "
-            f"{curr_kl_adj_factor:.4e}  {test1} {test2} {num_maxes} "
-            f"{max_kl_adj_factor} {min_kl_adj_factor} {window_len}\n"
+            f"{curr_kl_weight:.4e}  {test1} {test2} {num_maxes} "
+            f"{max_kl_weight_seen} {min_kl_weight_seen} {window_len}\n"
         )
 
-    def record_losses(self, curr_loss_recon, curr_loss_kl, curr_kl_adj_factor):
+    def record_losses(self, curr_loss_recon, curr_loss_kl, curr_kl_weight):
         self.recon_loss_list.append(curr_loss_recon)
         self.kl_loss_list.append(curr_loss_kl)
-        self.adj_kl_factor_list.append(curr_kl_adj_factor)
+        self.adj_kl_factor_list.append(curr_kl_weight)
 
     def record_latent_stats(self, mu_mean, log_var_mean, mu_var, log_var_var):
         self.mu_list.append(mu_mean)

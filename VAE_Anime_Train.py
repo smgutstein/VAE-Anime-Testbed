@@ -169,7 +169,7 @@ class VAE_Trainer:
         last_kl_weight = self.loss_policy.current_value()
 
         # Track moments when the controller shrinks its update factor
-        adj_ctr = [(0, 0, self.loss_policy.current_update_factor())]
+        weight_update_events = [(0, 0, self.loss_policy.current_update_factor())]
 
         self.monitor.open()
         try:
@@ -247,16 +247,16 @@ class VAE_Trainer:
                         )
  
                     update_info = self.loss_policy.update(curr_loss_recon, curr_loss_kl)
-                    adj_str = update_info["adj_str"]
+                    weight_direction = update_info["weight_direction"]
                     num_maxes = update_info["num_maxes"]
                     test1 = update_info["test1"]
                     test2 = update_info["test2"]
-                    max_kl_adj_factor = update_info["max_factor_seen"]
-                    min_kl_adj_factor = update_info["min_factor_seen"]
-                    curr_kl_adj_factor = update_info["factor"]
+                    max_kl_weight_seen = update_info["max_kl_weight_seen"]
+                    min_kl_weight_seen = update_info["min_kl_weight_seen"]
+                    curr_kl_weight = update_info["kl_weight"]
 
                     if update_info["update_factor_changed"]:
-                        adj_ctr.append((epoch, step, update_info["update_factor"]))
+                        weight_update_events.append((epoch, step, update_info["update_factor"]))
 
                     
                     self.monitor.record_text_line(
@@ -264,12 +264,12 @@ class VAE_Trainer:
                         step=step,
                         loss_recon=loss_recon,
                         loss_kl=loss_kl,
-                        curr_kl_adj_factor=curr_kl_adj_factor,
+                        curr_kl_weight=curr_kl_weight,
                         test1=test1,
                         test2=test2,
                         num_maxes=num_maxes,
-                        max_kl_adj_factor=max_kl_adj_factor,
-                        min_kl_adj_factor=min_kl_adj_factor,
+                        max_kl_weight_seen=max_kl_weight_seen,
+                        min_kl_weight_seen=min_kl_weight_seen,
                         window_len=update_info["window_len"],
                     )
 
@@ -287,7 +287,7 @@ class VAE_Trainer:
                     self.monitor.record_losses(
                         curr_loss_recon=curr_loss_recon,
                         curr_loss_kl=curr_loss_kl,
-                        curr_kl_adj_factor=curr_kl_adj_factor,
+                        curr_kl_weight=curr_kl_weight,
                     )
 
                     self.monitor.record_latent_stats(
@@ -305,7 +305,7 @@ class VAE_Trainer:
                     out_str = f"Epoch: {epoch} step: {step} "
                     out_str += f"recon loss = {curr_loss_recon:.4f} "
                     out_str += f"kl_loss = {curr_loss_kl:.4e} "
-                    out_str += f"{adj_str} kl_adj_factor = {curr_kl_adj_factor:.4e} "
+                    out_str += f"{weight_direction} kl_adj_factor = {curr_kl_weight:.4e} "
                     out_str += f"tot run time = {tot_delta_time}"
                     logging.info(out_str)
 
@@ -320,8 +320,8 @@ class VAE_Trainer:
             else:
                 logging.info("Model not saved")
 
-            logging.info(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
-            logging.info(adj_ctr)
+            logging.info(f"Number of kl_adj_factor changes: {len(weight_update_events)}")
+            logging.info(weight_update_events)
 
             self.write_run_summary(
                 status="completed",
@@ -392,12 +392,26 @@ class VAE_Trainer:
             "runtime_seconds": runtime_seconds,
         }
 
+        summary = {k: json_safe(v) for k, v in summary.items()}
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
 
         logging.info("Wrote run summary to %s", summary_path)
 
 #############################################################
+
+def json_safe(value):
+    if value is None:
+        return None
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.bool_,)):
+        return bool(value)
+    if isinstance(value, Path):
+        return str(value)
+    return value
 
 
 def latent_diagnostics(mu, log_var):
