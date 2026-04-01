@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import numpy as np
 
@@ -23,6 +24,8 @@ from VAE_Anime_Training_Monitor import TrainingMonitor
 from utils import set_all_seeds
 from utils import setup_logging
 
+class TrainingDivergedError(RuntimeError):
+    pass
 
 class VAE_Trainer:
     '''Class to train the VAE model on the anime faces dataset'''
@@ -31,8 +34,6 @@ class VAE_Trainer:
     mse_loss = tf.keras.losses.MeanSquaredError()
 
     def __init__(self, config_file="config.ini"):
-        # Load the config file
-        assert Path(config_file).exists(), "Config file does not exist"
         
         # Load typed training params from config file
         self.cfg = TrainerConfig.from_file(config_file)
@@ -82,7 +83,7 @@ class VAE_Trainer:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.cfg.learning_rate)
 
         self.loss_policy = build_loss_policy(self.cfg)
-        self.kl_adj_tensor = tf.Variable(
+        self.kl_weight_tensor = tf.Variable(
             self.loss_policy.current_value(),
             dtype=tf.float32,
             trainable=False,
@@ -96,10 +97,47 @@ class VAE_Trainer:
             snapshot_every=self.cfg.snapshot_every,
         )       
 
-    
+    def save_failure_tensors(self, epoch, step, x_batch_train,
+                             mu, log_var, curr_loss_recon, curr_loss_kl,
+                             diagnostics=None, max_items=32):
+        sigma = tf.exp(0.5 * log_var).numpy()
+
+        x_np = x_batch_train.numpy()[:max_items]
+        mu_full = mu.numpy()
+        log_var_full = log_var.numpy()
+
+        mu_np = mu_full[:max_items]
+        log_var_np = log_var_full[:max_items]
+        sigma_np = sigma[:max_items]
+        flat_idx = np.argsort(log_var_full.ravel())[-20:]
+
+        out_path = self.stats_dir / Path(f"failure_tensors_epoch{epoch}_step{step}.npz")
+
+
+        payload = {
+            "epoch": np.array(epoch, dtype=np.int32),
+            "step": np.array(step, dtype=np.int32),
+            "loss_recon": np.array(curr_loss_recon, dtype=np.float32),
+            "loss_kl": np.array(curr_loss_kl, dtype=np.float32),
+            "kl_weight": np.array(self.loss_policy.current_value(), dtype=np.float32),
+            "x_batch_train": x_np,
+            "mu": mu_np,
+            "log_var": log_var_np,
+            "sigma": sigma_np,
+            "top20_log_var_values": log_var_full.ravel()[flat_idx],
+            "top20_sigma_values": sigma.ravel()[flat_idx],
+            "top20_flat_indices": flat_idx,        
+            }
+
+        if diagnostics is not None:
+            payload["diagnostics_text"] = np.array(repr(diagnostics), dtype=object)
+
+        np.savez_compressed(out_path, **payload)
+        logging.error("Saved failure tensors to %s", out_path)
+        
     @staticmethod
     @tf.function(reduce_retracing=True)
-    def train_step(x_batch_train, kl_adj_tensor, vae_obj, loss_fn, optimizer):
+    def train_step(x_batch_train, kl_weight_tensor, vae_obj, loss_fn, optimizer):
         model = vae_obj.vae_net
 
         with tf.GradientTape() as tape:
@@ -112,7 +150,7 @@ class VAE_Trainer:
             loss_kl = tf.reduce_mean(1 + log_var - tf.square(mu) - tf.exp(log_var)) * -0.5
 
             # Compute weighted total loss
-            loss_tot = loss_recon + kl_adj_tensor * loss_kl
+            loss_tot = loss_recon + kl_weight_tensor * loss_kl
 
         grads = tape.gradient(loss_tot, model.trainable_weights)
         optimizer.apply_gradients(zip(grads, model.trainable_weights))
@@ -126,6 +164,9 @@ class VAE_Trainer:
         # Set Timing Parameters
         start_time = time()
         logging.info("Start Time: %s" % (ctime()))
+        last_recon = None
+        last_kl = None
+        last_kl_weight = self.loss_policy.current_value()
 
         # Track moments when the controller shrinks its update factor
         adj_ctr = [(0, 0, self.loss_policy.current_update_factor())]
@@ -148,12 +189,12 @@ class VAE_Trainer:
                 for step, x_batch_train in enumerate(self.data.training_dataset):
 
                     # Convert current KL factor to tensor for tf.function
-                    self.kl_adj_tensor.assign(self.loss_policy.current_value())
+                    self.kl_weight_tensor.assign(self.loss_policy.current_value())
 
                     # Call static train_step
                     loss_recon, loss_kl, mu, log_var = self.train_step(
                         x_batch_train,
-                        self.kl_adj_tensor,
+                        self.kl_weight_tensor,
                         self.vae, 
                         self.mse_loss,
                         self.optimizer)
@@ -162,14 +203,48 @@ class VAE_Trainer:
                     curr_loss_recon = loss_recon.numpy()
                     curr_loss_kl = loss_kl.numpy()
 
-                    if np.isnan(curr_loss_recon) or np.isnan(curr_loss_kl):
-                        logging.error("Nan in loss")
-                        import pdb
-                        pdb.set_trace()
-                    elif np.isinf(curr_loss_recon) or np.isinf(curr_loss_kl):
-                        logging.error("Inf in loss")
-                        import pdb
-                        pdb.set_trace()
+                    last_recon = curr_loss_recon
+                    last_kl = curr_loss_kl
+                    last_kl_weight = self.loss_policy.current_value()
+
+                    mu_finite = bool(tf.reduce_all(tf.math.is_finite(mu)).numpy())
+                    log_var_finite = bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy())
+
+                    loss_bad = (
+                        np.isnan(curr_loss_recon) or np.isnan(curr_loss_kl) or
+                        np.isinf(curr_loss_recon) or np.isinf(curr_loss_kl)
+                    )
+                    latent_bad = (not mu_finite) or (not log_var_finite)
+
+                    if loss_bad or latent_bad:
+                        diagnostics = latent_diagnostics(mu, log_var)
+
+                        logging.error(
+                            "Training diverged at epoch=%d step=%d recon=%s kl=%s kl_weight=%s diagnostics=%s",
+                            epoch,
+                            step,
+                            curr_loss_recon,
+                            curr_loss_kl,
+                            self.loss_policy.current_value(),
+                            diagnostics,
+                        )
+
+                        self.save_failure_tensors(
+                            epoch=epoch,
+                            step=step,
+                            x_batch_train=x_batch_train,
+                            mu=mu,
+                            log_var=log_var,
+                            curr_loss_recon=curr_loss_recon,
+                            curr_loss_kl=curr_loss_kl,
+                            diagnostics=diagnostics,
+                        )
+
+                        raise TrainingDivergedError(
+                            f"Training diverged at epoch={epoch}, step={step}, "
+                            f"recon={curr_loss_recon}, kl={curr_loss_kl}, "
+                            f"kl_weight={self.loss_policy.current_value()}"
+                        )
  
                     update_info = self.loss_policy.update(curr_loss_recon, curr_loss_kl)
                     adj_str = update_info["adj_str"]
@@ -248,12 +323,115 @@ class VAE_Trainer:
             logging.info(f"Number of kl_adj_factor changes: {len(adj_ctr)}")
             logging.info(adj_ctr)
 
+            self.write_run_summary(
+                status="completed",
+                start_time=start_time,
+                end_time=time(),
+                final_recon=last_recon,
+                final_kl=last_kl,
+                final_kl_weight=last_kl_weight,
+            )
+
+        except Exception as e:
+            self.write_run_summary(
+                status="failed",
+                start_time=start_time,
+                end_time=time(),
+                final_recon=last_recon,
+                final_kl=last_kl,
+                final_kl_weight=last_kl_weight,
+                error_message=str(e),
+            )
+            raise
+
         finally:
             self.monitor.close()
 
     #############################################################
 
-    
+    def write_run_summary(self, status, start_time, end_time,
+                          final_recon=None, final_kl=None,
+                          final_kl_weight=None, error_message=None,
+                          ):
+        
+        summary_path = self.output_dir / "run_summary.json"
+
+        runtime_seconds = None
+        if start_time is not None and end_time is not None:
+            runtime_seconds = float(end_time - start_time)
+
+        summary = {
+            "experiment_dir": str(self.output_dir),
+            "experiment_name": self.cfg.expt_name,
+            "status": status,
+            "error": error_message,
+
+            "config_file": str(self.cfg.config_file),
+            "loss_policy": self.loss_policy.policy_name,
+            "seed": self.cfg.seed,
+            "deterministic": self.cfg.deterministic,
+
+            "epochs": self.cfg.epochs,
+            "learning_rate": self.cfg.learning_rate,
+            "latent_dim": self.cfg.latent_dim,
+            "batch_size": self.cfg.batch_size,
+            "image_size": self.cfg.image_size,
+            "save_net": self.cfg.save_net,
+
+            "beta": self.cfg.beta,
+            "kl_adj_factor": self.cfg.kl_adj_factor,
+            "kl_adj_factor_max": self.cfg.kl_adj_factor_max,
+            "kl_adj_update_factor": self.cfg.kl_adj_update_factor,
+
+            "final_recon_loss": final_recon,
+            "final_kl_loss": final_kl,
+            "final_kl_weight": final_kl_weight,
+
+            "start_time": ctime(start_time) if start_time is not None else None,
+            "end_time": ctime(end_time) if end_time is not None else None,
+            "runtime_seconds": runtime_seconds,
+        }
+
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
+
+        logging.info("Wrote run summary to %s", summary_path)
+
+#############################################################
+
+
+def latent_diagnostics(mu, log_var):
+    sigma = tf.exp(0.5 * log_var)
+
+    def stats(x):
+        x_np = x.numpy()
+        finite = np.isfinite(x_np)
+        finite_vals = x_np[finite]
+        if finite_vals.size == 0:
+            return {
+                "finite_count": 0,
+                "nonfinite_count": x_np.size,
+                "min": None,
+                "max": None,
+                "mean": None,
+                "std": None,
+            }
+        return {
+            "finite_count": int(finite.sum()),
+            "nonfinite_count": int((~finite).sum()),
+            "min": float(finite_vals.min()),
+            "max": float(finite_vals.max()),
+            "mean": float(finite_vals.mean()),
+            "std": float(finite_vals.std()),
+        }
+
+    return {
+        "mu": stats(mu),
+        "log_var": stats(log_var),
+        "sigma": stats(sigma),
+        "largest_log_var": np.sort(log_var.numpy().ravel())[-10:].tolist(),
+        "largest_sigma": np.sort(sigma.numpy().ravel())[-10:].tolist(),
+    }    
 
 if __name__ == "__main__":
 
