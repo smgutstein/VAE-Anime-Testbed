@@ -19,7 +19,7 @@ class BaseLossPolicy(ABC):
     @abstractmethod
     def current_value(self):
         """
-        Return the current KL adjustment factor / weight.
+        Return the current KL weight.
         """
         pass
 
@@ -40,13 +40,13 @@ class BaseLossPolicy(ABC):
 
         Must return a dict compatible with the existing trainer usage:
             {
-                "adj_str": ...,
-                "factor": ...,
+                "weight_direction": ...,
+                "kl_weight": ...,
                 "num_maxes": ...,
                 "test1": ...,
                 "test2": ...,
-                "max_factor_seen": ...,
-                "min_factor_seen": ...,
+                "max_kl_weight_seen": ...,
+                "min_kl_weight_seen": ...,
                 "window_len": ...,
                 "update_factor": ...,
                 "update_factor_changed": ...,
@@ -60,8 +60,8 @@ class BaseLossPolicy(ABC):
         """
         return {
             "policy_name": self.policy_name,
-            "kl_adj_factor": self.current_value(),
-            "kl_adj_update_factor": self.current_update_factor(),
+            "kl_weight": self.current_value(),
+            "kl_weight_update_factor": self.current_update_factor(),
         }
 
 
@@ -71,12 +71,12 @@ class AdaptiveKLLossPolicy(BaseLossPolicy):
     a policy interface instead of on KLController directly.
     """
 
-    def __init__(self, kl_adj_factor, kl_adj_factor_max,
-                 kl_adj_update_factor, running_window):
+    def __init__(self, initial_kl_weight, max_kl_weight,
+                 kl_weight_update_factor, running_window):
         self.kl_controller = KLController(
-            initial_factor=kl_adj_factor,
-            max_factor=kl_adj_factor_max,
-            update_factor=kl_adj_update_factor,
+            initial_kl_weight=initial_kl_weight,
+            max_kl_weight=max_kl_weight,
+            kl_weight_update_factor=kl_weight_update_factor,
             running_window=running_window,
         )
 
@@ -99,15 +99,12 @@ class AdaptiveKLLossPolicy(BaseLossPolicy):
 class FixedBetaLossPolicy(BaseLossPolicy):
     """
     Fixed-beta / fixed-KL-weight baseline.
-
-    Internally still uses the legacy variable names so the rest of the code
-    can keep calling the result a kl_adj_factor for now.
     """
 
-    def __init__(self, kl_adj_factor):
-        self.kl_adj_factor = float(kl_adj_factor)
-        self.kl_adj_factor_max = float(kl_adj_factor)
-        self.kl_adj_update_factor = 0.0
+    def __init__(self, beta):
+        self.beta = float(beta)
+        self.beta_max = float(beta)
+        self.kl_weight_update_factor = 0.0
         self.running_window = 1
 
     @property
@@ -115,10 +112,10 @@ class FixedBetaLossPolicy(BaseLossPolicy):
         return "fixed_beta"
 
     def current_value(self):
-        return self.kl_adj_factor
+        return self.beta
 
     def current_update_factor(self):
-        return self.kl_adj_update_factor
+        return self.kl_weight_update_factor
 
     def update(self, curr_loss_recon, curr_loss_kl):
         """
@@ -127,15 +124,15 @@ class FixedBetaLossPolicy(BaseLossPolicy):
         """
         return {
             "policy_name": self.policy_name,
-            "adj_str": "=",
-            "factor": self.kl_adj_factor,
+            "weight_direction": "=",
+            "kl_weight": self.beta,
             "num_maxes": 0,
             "test1": False,
             "test2": False,
-            "max_factor_seen": self.kl_adj_factor,
-            "min_factor_seen": self.kl_adj_factor,
+            "max_kl_weight_seen": self.beta,
+            "min_kl_weight_seen": self.beta,
             "window_len": 1,
-            "update_factor": self.kl_adj_update_factor,
+            "update_factor": self.kl_weight_update_factor,
             "update_factor_changed": False,
         }
 
@@ -146,22 +143,21 @@ def build_loss_policy(cfg):
 
     Expected config additions:
         cfg.loss_policy in {"adaptive_kl", "fixed_beta"}
-        cfg.beta  (or, if you prefer less churn, cfg.fixed_kl_adj_factor)
 
-    To keep variable names consistent with the current codebase, the
-    fixed-beta path still feeds the value in as a kl_adj_factor.
+    Adaptive mode reads the KL-weight schedule fields from config;
+    fixed-beta mode reads cfg.beta.
     """
     if cfg.loss_policy == "adaptive_kl":
         return AdaptiveKLLossPolicy(
-            kl_adj_factor=cfg.kl_adj_factor,
-            kl_adj_factor_max=cfg.kl_adj_factor_max,
-            kl_adj_update_factor=cfg.kl_adj_update_factor,
+            initial_kl_weight=cfg.kl_adj_factor,
+            max_kl_weight=cfg.kl_adj_factor_max,
+            kl_weight_update_factor=cfg.kl_adj_update_factor,
             running_window=cfg.running_window,
         )
 
     if cfg.loss_policy == "fixed_beta":
         return FixedBetaLossPolicy(
-            kl_adj_factor=cfg.beta,
+            beta=cfg.beta,
         )
 
     raise ValueError(f"Unknown loss_policy: {cfg.loss_policy}")
