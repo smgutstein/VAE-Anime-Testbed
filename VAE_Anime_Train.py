@@ -179,11 +179,8 @@ class VAE_Trainer:
 
                 # Flush buffers
                 if (epoch + 1) % 100 == 0:
-                    self.monitor.loss_file.flush()
-                    self.monitor.f_loss_lists.flush()
-                    self.monitor.f_mu.flush()
-                    self.monitor.f_var.flush()
-                    logging.info("File Buffers Flushed ")
+                    self.monitor.flush()
+                    logging.info("File Buffers Flushed")
 
                 # Iterate over the batches of the dataset.
                 for step, x_batch_train in enumerate(self.data.training_dataset):

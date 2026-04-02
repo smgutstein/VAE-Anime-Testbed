@@ -15,9 +15,8 @@ from utils import is_config_file
 from utils import read_config_file
 from utils import setup_logging
 
+from VAE_Anime_ArtifactReader import ArtifactReader
 from VAE_Anime_ResultsIO import read_loss_file_points_io
-from VAE_Anime_ResultsIO import read_loss_lists
-from VAE_Anime_ResultsIO import read_mu_log_var_lists
 
 from VAE_ParetoFront import ParetoFront
 
@@ -45,6 +44,7 @@ class AnalyzeResults():
 
         self.stats_dir = self.output_dir / "stats" 
         self.stats_dir.mkdir(parents=True, exist_ok=True)
+        self.reader = ArtifactReader(self.stats_dir)
 
         self.raw_log_var_graphs_dir = self.stats_dir / "raw_log_var_graphs"
         self.raw_log_var_graphs_dir.mkdir(parents=True, exist_ok=True)
@@ -54,6 +54,8 @@ class AnalyzeResults():
 
         self.movies_dir = self.output_dir / "movies"
         self.movies_dir.mkdir(parents=True, exist_ok=True)
+
+        
 
     def get_parent_dir(self):
         config = read_config_file(self.config_file)
@@ -229,11 +231,15 @@ class AnalyzeResults():
         self.compare_recon_kl_losses()  
         self.compare_recon_kl_losses2()
 
-    def get_mu_log_var_results(self):
-        return read_mu_log_var_lists(self.stats_dir)
+    def get_recon_kl_results(self):
+        series = self.reader.read_loss_series()
+        return series.recon_loss, series.kl_loss, series.kl_weight
 
-    def make_final_mu_log_var_graphs(self):
+    def get_mu_log_var_results(self):
+        series = self.reader.read_latent_series()
+        return series.mu, series.log_var
     
+    def make_final_mu_log_var_graphs(self):
         mu, log_var = self.get_mu_log_var_results()
         graph_list = [(mu[-1], 'mu.png'), (log_var[-1], 'log_var.png')]
         
