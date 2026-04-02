@@ -470,9 +470,9 @@ if __name__ == "__main__":
         logging.info("Starting to analyze results....")
         ar = AnalyzeResults(args.config_file, vae.curr_expt)
         ar.make_singleton_graphs()
-        ar.make_images_movie()
+        ar.movie_builder.make_images_movie()
         ar.make_pareto_curve_graph()
         ar.make_paretoish_movie()
         if vae.cfg.make_mu_log_var_movies:
-            ar.make_mu_log_var_movie(log_var_graph=True)
-            ar.make_mu_log_var_movie(log_var_graph=False)
+            ar.movie_builder.make_mu_log_var_movie(log_var_graph=True)
+            ar.movie_builder.make_mu_log_var_movie(log_var_graph=False)

@@ -17,6 +17,7 @@ from utils import setup_logging
 
 from VAE_Anime_ArtifactReader import ArtifactReader
 from VAE_Anime_LatentStatsPlotter import VAELatentStatsPlotter
+from VAE_Anime_MovieBuilder import VAEMovieBuilder
 from VAE_Anime_LossPlotter import VAELossPlotter
 from VAE_Anime_ResultsIO import read_loss_file_points_io
 
@@ -60,6 +61,10 @@ class AnalyzeResults():
         self.movies_dir = self.output_dir / "movies"
         self.movies_dir.mkdir(parents=True, exist_ok=True)
 
+        self.movie_builder = VAEMovieBuilder(raw_image_dir=self.raw_image_dir,
+                                             stats_dir=self.stats_dir,
+                                             movies_dir=self.movies_dir)
+
         
 
     def get_parent_dir(self):
@@ -70,39 +75,6 @@ class AnalyzeResults():
         if not path.exists():
             raise FileNotFoundError(f"Missing {description}: {path}")
         return path
-
-
-    def make_images_movie(self):
-
-        # Function used to converted epoch-step labeling
-        # of frames to frame numbers
-        def frame_num(file_path):
-            file_name = file_path.name
-            match = re.match(r"^image_at_epoch_(\d+)_step(\d+)\.png$", file_name)
-            if match is None:
-                raise ValueError(f"Unexpected frame filename format: {file_name}")
-            epoch = int(match.group(1))
-            step = int(match.group(2))
-
-            frame_num = 100*epoch + step
-            return frame_num
-        
-        self.require_artifact(self.raw_image_dir, "raw image directory")
-        frames = [file for file in self.raw_image_dir.iterdir() 
-                  if re.match(r"^image_at_epoch_\d+_step\d+\.png$", file.name)]
-        if len(frames) == 0:
-            raise RuntimeError(f"No movie frames found in {self.raw_image_dir}")
-        else:
-            frames.sort(key=frame_num)
-
-        # Make movie
-        movie_name = 'vae_movie.mp4'
-        writer = imageio.get_writer(self.movies_dir / movie_name, fps=10)
-        for file in tqdm(frames, desc='Making movie for ' + movie_name[:-4]):
-            im = imageio.imread(file)
-            writer.append_data(im)
-        writer.close()
-        logging.info(f"Saved {self.movies_dir / movie_name}")
  
     
     def read_loss_file_points(self):
@@ -175,50 +147,6 @@ class AnalyzeResults():
             plt.savefig(self.stats_dir / Path(graph_name))
             logging.info(f" Saved {self.stats_dir / Path(graph_name)}")
 
-    def make_mu_log_var_movie(self, log_var_graph=True):
-
-        mu, log_var = self.get_mu_log_var_results()
-        
-        if log_var_graph:
-            data = log_var
-            graph_name="log_var.mp4"
-        else:
-            data = mu
-            graph_name="mu.mp4"
-
-        lower_lim = np.percentile(np.percentile(data, 2, axis=1), 2)
-        upper_lim = np.percentile(np.percentile(data, 98, axis=1), 99)
-
-        writer = imageio.get_writer(self.movies_dir / graph_name, 
-                                    fps=20)
-
-        for ctr, curr_data in enumerate(tqdm(data, 
-                                             desc='Making movie for ' + graph_name[:-4])):
-            plot_data = np.sort(curr_data.numpy())
-            fig, ax = plt.subplots()
-            ax.set_xlabel('Ordered Indices')
-            ax.set_ylabel(graph_name[:-4])
-            ax.axis([0,len(plot_data), lower_lim, upper_lim])
-            ax.set_title('Sample'+ str(ctr))
-            ax.scatter(range(len(plot_data)), plot_data, s=3, color='cadetblue')
-            ax.axhline(y=0, color='lightsteelblue')
-
-            # Convert the figure to an image
-            canvas = FigureCanvas(fig)
-            canvas.draw()
-            buf = canvas.buffer_rgba()
-            image = Image.frombytes('RGBA', canvas.get_width_height(),
-                                    bytes(buf), 'raw', 'RGBA', 0, 1)
-
-            # Write the image to the movie file
-            writer.append_data(np.array(image))
-
-            # Close the figure
-            plt.close(fig)
-        
-        # Close Writer
-        writer.close()
-        logging.info(f"Saved {self.movies_dir / graph_name}")
 
     def test_pareto_curve(self):
         # Read file with recon and kl losses
@@ -353,11 +281,11 @@ if __name__ == "__main__":
     
     ar = AnalyzeResults(args.config_file, args.expt)
     ar.make_singleton_graphs()  
-    ar.make_images_movie()
+    ar.movie_builder.make_images_movie()
     ar.make_paretoish_movie()
     ar.make_pareto_curve_graph()
     if args.stat_graphs:
-        ar.make_mu_log_var_movie(log_var_graph=True)
-        ar.make_mu_log_var_movie(log_var_graph=False)
+        ar.movie_builder.make_mu_log_var_movie(log_var_graph=True)
+        ar.movie_builder.make_mu_log_var_movie(log_var_graph=False)
 
     
