@@ -168,7 +168,7 @@ class VAE_Trainer:
         last_kl = None
         last_kl_weight = self.loss_policy.current_value()
 
-        # Track moments when the controller shrinks its update factor
+        # Track moments when the adaptive loss-policy shrinks its update factor
         weight_update_events = [(0, 0, self.loss_policy.current_update_factor())]
 
         self.monitor.open()
@@ -302,7 +302,7 @@ class VAE_Trainer:
                     out_str = f"Epoch: {epoch} step: {step} "
                     out_str += f"recon loss = {curr_loss_recon:.4f} "
                     out_str += f"kl_loss = {curr_loss_kl:.4e} "
-                    out_str += f"{weight_direction} kl_adj_factor = {curr_kl_weight:.4e} "
+                    out_str += f"{weight_direction} kl_weight = {curr_kl_weight:.4e} "
                     out_str += f"tot run time = {tot_delta_time}"
                     logging.info(out_str)
 
@@ -317,7 +317,7 @@ class VAE_Trainer:
             else:
                 logging.info("Model not saved")
 
-            logging.info(f"Number of kl_adj_factor changes: {len(weight_update_events)}")
+            logging.info(f"Number of kl_weight changes: {len(weight_update_events)}")
             logging.info(weight_update_events)
 
             self.write_run_summary(
@@ -376,9 +376,9 @@ class VAE_Trainer:
             "save_net": self.cfg.save_net,
 
             "beta": self.cfg.beta,
-            "kl_adj_factor": self.cfg.kl_adj_factor,
-            "kl_adj_factor_max": self.cfg.kl_adj_factor_max,
-            "kl_adj_update_factor": self.cfg.kl_adj_update_factor,
+            "initial_kl_weight": self.cfg.kl_adj_factor,
+            "max_kl_weight": self.cfg.kl_adj_factor_max,
+            "kl_weight_update_factor": self.cfg.kl_adj_update_factor,
 
             "final_recon_loss": final_recon,
             "final_kl_loss": final_kl,

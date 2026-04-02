@@ -27,7 +27,7 @@ def read_loss_file_points_io(loss_file):
         fl                : filtered raw lines (header + valid data lines)
         recon_pts         : list[float]
         kl_pts            : list[float]
-        kl_adj_factor_pts : list[float]
+        kl_weight_pts : list[float]
     """
     loss_file = require_artifact(loss_file, "loss text file")
 
@@ -39,19 +39,19 @@ def read_loss_file_points_io(loss_file):
 
     recon_pts = []
     kl_pts = []
-    kl_adj_factor_pts = []
+    kl_weight_pts = []
 
     for curr_line in fl[1:]:  # skip header
         data = [x.strip() for x in curr_line.split("--")]
         if len(data) >= 5:
             recon_pts.append(float(data[2]))
             kl_pts.append(float(data[3]))
-            kl_adj_factor_pts.append(float(data[4].split()[0]))
+            kl_weight_pts.append(float(data[4].split()[0]))
         else:
             logging.warning("Last line of losses_file incomplete: %s", data)
             break
 
-    return fl, recon_pts, kl_pts, kl_adj_factor_pts
+    return fl, recon_pts, kl_pts, kl_weight_pts
 
 
 def read_loss_lists(stats_dir):

@@ -16,6 +16,8 @@ from utils import read_config_file
 from utils import setup_logging
 
 from VAE_Anime_ArtifactReader import ArtifactReader
+from VAE_Anime_LatentStatsPlotter import VAELatentStatsPlotter
+from VAE_Anime_LossPlotter import VAELossPlotter
 from VAE_Anime_ResultsIO import read_loss_file_points_io
 
 from VAE_ParetoFront import ParetoFront
@@ -38,6 +40,7 @@ class AnalyzeResults():
         self.pareto_front = ParetoFront()
 
 
+
         logging.info(f"Making graphs of results in {self.output_dir}")
         self.raw_image_dir = self.output_dir / "raw_images"
         self.raw_image_dir.mkdir(parents=True, exist_ok=True)
@@ -45,6 +48,8 @@ class AnalyzeResults():
         self.stats_dir = self.output_dir / "stats" 
         self.stats_dir.mkdir(parents=True, exist_ok=True)
         self.reader = ArtifactReader(self.stats_dir)
+        self.loss_plotter = VAELossPlotter(self.stats_dir)
+        self.latent_plotter = VAELatentStatsPlotter(self.stats_dir)
 
         self.raw_log_var_graphs_dir = self.stats_dir / "raw_log_var_graphs"
         self.raw_log_var_graphs_dir.mkdir(parents=True, exist_ok=True)
@@ -98,9 +103,6 @@ class AnalyzeResults():
             writer.append_data(im)
         writer.close()
         logging.info(f"Saved {self.movies_dir / movie_name}")
-
-    def get_recon_kl_results(self):
-        return read_loss_lists(self.stats_dir)
  
     
     def read_loss_file_points(self):
@@ -113,87 +115,6 @@ class AnalyzeResults():
             self.stats_dir / Path("losses_file.txt")
         )
         return fl, recon_pts, kl_pts
-
-        
-    def compare_recon_kl_losses(self):
-
-        recon_loss_list, kl_loss_list, _ = self.get_recon_kl_results()
-        if len(recon_loss_list) == 0 or len(kl_loss_list) == 0:
-            raise RuntimeError(f"No reconstruction/KL points found in {self.stats_dir}")
-
-
-        fig, axes = plt.subplots(3)  # Create a figure containing a single axes.
-        axes[0].set_xlabel('Iteration')
-        axes[0].set_ylabel('Loss')
-        axes[0].set_yscale('log')
-        axes[0].plot(range(len(recon_loss_list)), recon_loss_list,
-                     label="recon\n loss")
-        axes[0].plot(range(len(recon_loss_list)), kl_loss_list,
-                     label="kl\n loss")
-        axes[0].set_ylim([.1,1000])
-        axes[0].legend(loc='center left', bbox_to_anchor=(1, 0.5),
-                       prop={'size': 6})
-
-        axes[1].set_xlabel('Iteration')
-        axes[1].set_ylabel('Recon Loss')
-        axes[1].plot(range(len(recon_loss_list)), recon_loss_list,
-                     label="recon\n loss")
-        axes[1].legend(loc='center left', bbox_to_anchor=(1, 0.5),
-                       prop={'size': 6})
-
-        axes[2].set_xlabel('Iteration')
-        axes[2].set_ylabel('KL Loss')
-        axes[2].plot(range(len(recon_loss_list)), kl_loss_list,
-                     label="kl\n loss", color='#ff7f0e')
-        axes[2].legend(loc='center left', bbox_to_anchor=(1, 0.5),
-                       prop={'size': 6})
-
-        plt.savefig(self.stats_dir / Path('Recon_KL_Comp_1.png'))
-
-
-    def compare_recon_kl_losses2(self):
-
-        recon_loss_list, kl_loss_list, adj_kl_factor_list = self.get_recon_kl_results()
-        if len(recon_loss_list) == 0 or len(kl_loss_list) == 0:
-            raise RuntimeError(f"No reconstruction/KL points found in {self.stats_dir}")
-
-        num_pts = len(recon_loss_list)
-
-
-        fig, axes = plt.subplots(2,2)  
-        # Log scale plot of both losses
-        axes[0][0].set_xlabel('Iteration',fontsize=8, labelpad=-2)
-        axes[0][0].set_ylabel('Loss')
-        axes[0][0].set_yscale('log')
-        axes[0][0].plot(range(num_pts), recon_loss_list, label="recon loss")
-        axes[0][0].plot(range(num_pts), kl_loss_list, label="kl loss")
-        axes[0][0].set_ylim([.0001,1000])
-
-        # Plot adjusted kl loss
-        axes[0][1].set_xlabel('Iteration',fontsize=8, labelpad=-2)
-        axes[0][1].set_ylabel('Adj KL Loss')
-        axes[0][1].ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
-        axes[0][1].plot(range(num_pts), adj_kl_factor_list,
-                        label="adj kl factor", color='#ff7f0e')
-        axes[0][1].yaxis.tick_right()
-        axes[0][1].yaxis.set_label_position("right")
-
-        # Plot recon loss
-        axes[1][0].set_xlabel('Iteration')
-        axes[1][0].set_ylabel('Recon Loss')
-        axes[1][0].plot(range(num_pts), recon_loss_list, label="recon loss")
-
-        # Plot kl loss  
-        axes[1][1].set_xlabel('Iteration')
-        axes[1][1].set_ylabel('KL Loss')
-        axes[1][1].set_yscale('log')
-        axes[1][1].yaxis.tick_right()
-        axes[1][1].yaxis.set_label_position("right")
-        axes[1][1].plot(range(num_pts), kl_loss_list,
-                        label="kl loss", color='#ff7f0e')
-
-        plt.savefig(self.stats_dir / Path('Recon_KL_Comp_2.png'))
-
     
 
     def make_paretoish_graph(self):
@@ -228,8 +149,8 @@ class AnalyzeResults():
     def make_singleton_graphs(self):
         self.make_paretoish_graph()
         self.make_final_mu_log_var_graphs()
-        self.compare_recon_kl_losses()  
-        self.compare_recon_kl_losses2()
+        self.loss_plotter.compare_recon_kl_losses()  
+        self.loss_plotter.compare_recon_kl_losses2()
 
     def get_recon_kl_results(self):
         series = self.reader.read_loss_series()
