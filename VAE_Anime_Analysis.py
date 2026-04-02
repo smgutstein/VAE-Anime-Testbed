@@ -78,17 +78,44 @@ class AnalyzeResults():
  
     
     def read_loss_file_points(self):
-        """Read recon/KL points from stats/losses_file.txt.
+        """
+        Backward-compatible reader for Pareto-ish analysis.
+
+        Prefer structured loss artifacts. Fall back to losses_file.txt only if
+        structured artifacts are unavailable.
+        """
+        try:
+            recon_pts, kl_pts, kl_weight_pts = self.read_loss_points()
+
+            # Synthesize a minimal fl-compatible object so old callers that use
+            # len(fl[1:]) do not break immediately.
+            fl = ["structured_artifact_header\n"] + [
+                f"{idx} -- {idx} -- {r} -- {k} -- {w}\n"
+                for idx, (r, k, w) in enumerate(zip(recon_pts, kl_pts, kl_weight_pts))
+            ]
+            return fl, recon_pts, kl_pts
+
+        except Exception as e:
+            logging.warning(
+                "Falling back to losses_file.txt for Pareto-ish analysis because "
+                "structured loss read failed: %s",
+                e,
+            )
+            fl, recon_pts, kl_pts, _ = read_loss_file_points_io(
+                self.stats_dir / Path("losses_file.txt")
+            )
+            return fl, recon_pts, kl_pts
+    
+    def read_loss_points(self):
+        """
+        Preferred loss-point reader for Pareto-ish analysis.
 
         Returns:
-            recon_pts, kl_pts
+            recon_pts, kl_pts, kl_weight_pts
         """
-        fl, recon_pts, kl_pts, _ = read_loss_file_points_io(
-            self.stats_dir / Path("losses_file.txt")
-        )
-        return fl, recon_pts, kl_pts
+        series = self.reader.read_loss_series()
+        return series.recon_loss, series.kl_loss, series.kl_weight
     
-
     def make_paretoish_graph(self):
 
         # Read file with recon and kl losses
@@ -162,15 +189,15 @@ class AnalyzeResults():
     def make_paretoish_movie(self):
 
         # Read file with recon and kl losses
-        fl, recon_pts, kl_pts = self.read_loss_file_points()
- 
-        skip_pts = int(.05*len(recon_pts))   
+        _, recon_pts, kl_pts = self.read_loss_file_points()
+
+        skip_pts = int(.05 * len(recon_pts))
         recon_pts = recon_pts[skip_pts:]
         kl_pts = kl_pts[skip_pts:]
-        # Create a writer object
         writer = imageio.get_writer(self.movies_dir / "paretoish.mp4", fps=5)
+
+        num_points = len(recon_pts)
         
-        num_points = len(fl[1:])
         min_x, max_x = np.percentile(np.array(recon_pts),[0,99.9])
         min_y, max_y = np.percentile(np.array(kl_pts),[0,99.9])
         frame_len = max(1,int(0.05 * num_points))

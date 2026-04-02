@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 
 from pathlib import Path
 
+from VAE_Anime_ArtifactReader import ArtifactReader
 from VAE_Anime_ResultsIO import read_loss_file_points_io
 from VAE_ParetoFront import ParetoFront
 
@@ -26,6 +27,18 @@ def get_experiment_label(expt_dir, fallback_label=None):
         return f"{expt_dir.name}: {fallback_label}"
 
     return expt_dir.name
+
+def read_pareto_points(expt_dir):
+    stats_dir = Path(expt_dir) / "stats"
+    reader = ArtifactReader(stats_dir)
+
+    try:
+        series = reader.read_loss_series()
+        return series.recon_loss, series.kl_loss
+    except Exception:
+        losses_file = resolve_losses_file(expt_dir)
+        _, recon_pts, kl_pts, _ = read_loss_file_points_io(losses_file)
+        return recon_pts, kl_pts
 
 def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):
     if expt_dir is not None:
@@ -172,13 +185,9 @@ if __name__ == "__main__":
     # Check if the experiment directories exist
     expt1_dir = resolve_experiment_dir(parent_dir, expt_num=e1, expt_dir=e1_dir_arg)
     expt2_dir = resolve_experiment_dir(parent_dir, expt_num=e2, expt_dir=e2_dir_arg)
-    expt1_file = resolve_losses_file(expt1_dir)
-    expt2_file = resolve_losses_file(expt2_dir)
 
-    # Get the data points
-
-    _, recon_pts1, kl_pts1, _ = read_loss_file_points_io(expt1_file)
-    _, recon_pts2, kl_pts2, _ = read_loss_file_points_io(expt2_file)
+    recon_pts1, kl_pts1 = read_pareto_points(expt1_dir)
+    recon_pts2, kl_pts2 = read_pareto_points(expt2_dir)
 
     output_dir = Path(args.output_dir) if args.output_dir \
                                        else Path(parent_dir) / Path('pareto_comps')
