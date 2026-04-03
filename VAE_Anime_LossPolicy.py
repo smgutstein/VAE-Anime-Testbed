@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 
-from VAE_Anime_KL_Controller import KLController
+from VAE_Anime_KL_Weight_Scheduler import AdaptiveKLWeightScheduler
 
 
 class BaseLossPolicy(ABC):
     """
     Abstract interface for KL-weight / loss-weight policies.
 
-    Kept intentionally close to the existing KLController API so that
+    Kept intentionally close to the existing scheduler API so that
     VAE_Anime_Train.py can be refactored with minimal variable churn.
     """
 
@@ -67,13 +67,13 @@ class BaseLossPolicy(ABC):
 
 class AdaptiveKLLossPolicy(BaseLossPolicy):
     """
-    Thin wrapper around the existing KLController so the trainer depends on
-    a policy interface instead of on KLController directly.
+    Thin wrapper around the existing heuristic scheduler so the trainer
+    depends on a policy interface instead of on the scheduler directly.
     """
 
     def __init__(self, initial_kl_weight, max_kl_weight,
                  kl_weight_update_factor, running_window):
-        self.kl_controller = KLController(
+        self.kl_scheduler = AdaptiveKLWeightScheduler(
             initial_kl_weight=initial_kl_weight,
             max_kl_weight=max_kl_weight,
             kl_weight_update_factor=kl_weight_update_factor,
@@ -85,13 +85,13 @@ class AdaptiveKLLossPolicy(BaseLossPolicy):
         return "adaptive_kl"
 
     def current_value(self):
-        return self.kl_controller.current_value()
+        return self.kl_scheduler.current_value()
 
     def current_update_factor(self):
-        return self.kl_controller.current_update_factor()
+        return self.kl_scheduler.current_update_factor()
 
     def update(self, curr_loss_recon, curr_loss_kl):
-        update_info = self.kl_controller.update(curr_loss_recon, curr_loss_kl)
+        update_info = self.kl_scheduler.update(curr_loss_recon, curr_loss_kl)
         update_info["policy_name"] = self.policy_name
         return update_info
 
@@ -120,7 +120,7 @@ class FixedBetaLossPolicy(BaseLossPolicy):
     def update(self, curr_loss_recon, curr_loss_kl):
         """
         No adaptation. Return an update_info dict shaped like the adaptive
-        controller's dict so existing trainer/monitor code can keep working.
+        scheduler's dict so existing trainer/monitor code can keep working.
         """
         return {
             "policy_name": self.policy_name,
