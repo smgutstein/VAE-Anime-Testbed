@@ -19,9 +19,9 @@ class TrainerConfig:
     learning_rate: float
     loss_policy: str
     beta: float
-    kl_adj_factor: float
-    kl_adj_factor_max: float
-    kl_adj_update_factor: float
+    initial_kl_weight: float
+    max_kl_weight: float
+    kl_weight_update_factor: float
     running_window: int
 
     # Output
@@ -61,6 +61,16 @@ class TrainerConfig:
         config_path = Path(config_file)
         config = load_and_validate_config(config_path)
 
+        def _get_kl_float(new_name, old_name):
+            section = "Training_Parameters"
+            if config.has_option(section, new_name):
+                return config.getfloat(section, new_name)
+            if config.has_option(section, old_name):
+                return config.getfloat(section, old_name)
+            raise ValueError(
+                f"Missing [{section}] {new_name} (or legacy {old_name})"
+            )
+
         filter_factors = tuple(
             int(x.strip())
             for x in config.get("Model_Parameters", "filter_factors").split(",")
@@ -82,9 +92,10 @@ class TrainerConfig:
             learning_rate=config.getfloat("Training_Parameters", "learning_rate"),
             loss_policy=config.get("Training_Parameters", "loss_policy"),
             beta=config.getfloat("Training_Parameters", "beta"),
-            kl_adj_factor=config.getfloat("Training_Parameters", "kl_adj_factor"),
-            kl_adj_factor_max=config.getfloat("Training_Parameters", "kl_adj_factor_max"),
-            kl_adj_update_factor=config.getfloat("Training_Parameters", "kl_adj_update_factor"),
+            initial_kl_weight=_get_kl_float("initial_kl_weight", "kl_adj_factor"),
+            max_kl_weight=_get_kl_float("max_kl_weight", "kl_adj_factor_max"),
+            kl_weight_update_factor=_get_kl_float("kl_weight_update_factor", 
+                                                  "kl_adj_update_factor"),  
             running_window=config.getint("Training_Parameters", "running_window"),
 
             # Output
@@ -145,12 +156,12 @@ class TrainerConfig:
         if self.beta < 0:
             raise ValueError("beta must be >= 0")
 
-        if self.kl_adj_factor < 0:
-            raise ValueError("kl_adj_factor must be >= 0")
-        if self.kl_adj_factor_max < self.kl_adj_factor:
-            raise ValueError("kl_adj_factor_max must be >= kl_adj_factor")
-        if self.kl_adj_update_factor <= 0:
-            raise ValueError("kl_adj_update_factor must be > 0")
+        if self.initial_kl_weight < 0:
+            raise ValueError("initial_kl_weight must be >= 0")
+        if self.max_kl_weight < self.initial_kl_weight:
+            raise ValueError("max_kl_weight must be >= initial_kl_weight")
+        if self.kl_weight_update_factor <= 0:
+            raise ValueError("kl_weight_update_factor must be > 0")
         if self.running_window < 2:
             raise ValueError("running_window must be >= 2")
 

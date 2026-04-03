@@ -132,9 +132,10 @@ def delt_div(x,y):
     
 class DeltaGenerator():
     '''Overly generalized function used to give more flexibility
-       in how I would update the kl_adj_factor. The idea is to  
+       in how I would update the KL weight. The idea is to
        have a function that can be customized to increase or
-       decrease the kl_adj_factor in a variety of ways.'''
+       decrease the KL weight in a variety of ways.'''
+
     def __init__(self, delta_inc_func, delta_dec_func, delta):
 
         self.delta = delta
@@ -239,9 +240,8 @@ def load_and_validate_config(config_file):
 
     required_options = {
         "Training_Parameters": [
-            "epochs", "learning_rate",  "loss_policy", "beta",
-            "kl_adj_factor", "kl_adj_factor_max",
-            "kl_adj_update_factor", "running_window",
+            "epochs", "learning_rate", "loss_policy", "beta",
+            "running_window",
         ],
         "Output_Parameters": ["parent_dir", "save_net"],
         "Data_Parameters": [
@@ -259,6 +259,23 @@ def load_and_validate_config(config_file):
     }
 
     for section, options in required_options.items():
+
+        training = "Training_Parameters"
+        has_new_kl_keys = all(
+            config.has_option(training, opt)
+            for opt in ("initial_kl_weight", "max_kl_weight", "kl_weight_update_factor")
+        )
+        has_old_kl_keys = all(
+            config.has_option(training, opt)
+            for opt in ("kl_adj_factor", "kl_adj_factor_max", "kl_adj_update_factor")
+        )
+
+        if not (has_new_kl_keys or has_old_kl_keys):
+            raise ValueError(
+                "Missing KL-weight config options: require either "
+                "[Training_Parameters] initial_kl_weight/max_kl_weight/kl_weight_update_factor "
+                "or legacy kl_adj_factor/kl_adj_factor_max/kl_adj_update_factor"
+            )
         for option in options:
             if not config.has_option(section, option):
                 raise ValueError(f"Missing required config option: [{section}] {option}")

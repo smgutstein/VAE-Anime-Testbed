@@ -23,7 +23,7 @@ class ArtifactWriter:
 
     def write_loss_text_header(self):
         self.loss_text_fh.write(
-            "epoch -- step -- recon_loss -- kl_loss -- kl_adj_factor  "
+            "epoch -- step -- recon_loss -- kl_loss -- kl_weight  "
             "bounce_test1 bounce_test2 num_maxes max_factor min_factor window_len\n"
         )
 
@@ -46,6 +46,8 @@ class ArtifactWriter:
             f"{float(curr_kl_weight):.4e}  {test1} {test2} {num_maxes} "
             f"{max_kl_weight_seen} {min_kl_weight_seen} {window_len}\n"
         )
+
+
 
     def write_loss_chunk(self, recon_loss, kl_loss, kl_weight):
         chunk = LossEventChunk(

@@ -376,9 +376,9 @@ class VAE_Trainer:
             "save_net": self.cfg.save_net,
 
             "beta": self.cfg.beta,
-            "initial_kl_weight": self.cfg.kl_adj_factor,
-            "max_kl_weight": self.cfg.kl_adj_factor_max,
-            "kl_weight_update_factor": self.cfg.kl_adj_update_factor,
+            "initial_kl_weight": self.cfg.initial_kl_weight,
+            "max_kl_weight": self.cfg.max_kl_weight,
+            "kl_weight_update_factor": self.cfg.kl_weight_update_factor,
 
             "final_recon_loss": final_recon,
             "final_kl_loss": final_kl,

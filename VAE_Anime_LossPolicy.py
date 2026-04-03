@@ -149,9 +149,9 @@ def build_loss_policy(cfg):
     """
     if cfg.loss_policy == "adaptive_kl":
         return AdaptiveKLLossPolicy(
-            initial_kl_weight=cfg.kl_adj_factor,
-            max_kl_weight=cfg.kl_adj_factor_max,
-            kl_weight_update_factor=cfg.kl_adj_update_factor,
+            initial_kl_weight=cfg.initial_kl_weight,
+            max_kl_weight=cfg.max_kl_weight,
+            kl_weight_update_factor=cfg.kl_weight_update_factor,
             running_window=cfg.running_window,
         )
 

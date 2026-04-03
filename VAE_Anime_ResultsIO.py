@@ -21,7 +21,7 @@ def read_loss_file_points_io(loss_file):
     Current expected text format is written by
     TrainingMonitor.record_text_line(), i.e.
 
-        epoch -- step -- recon_loss -- kl_loss -- kl_adj_factor ...
+        epoch -- step -- recon_loss -- kl_loss -- kl_weight ...
 
     Returns:
         fl                : filtered raw lines (header + valid data lines)

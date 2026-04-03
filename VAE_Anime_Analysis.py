@@ -147,33 +147,13 @@ class AnalyzeResults():
 
     def make_singleton_graphs(self):
         self.make_paretoish_graph()
-        self.make_final_mu_log_var_graphs()
+        self.latent_plotter.make_final_mu_log_var_graphs()
         self.loss_plotter.compare_recon_kl_losses()  
         self.loss_plotter.compare_recon_kl_losses2()
 
     def get_recon_kl_results(self):
         series = self.reader.read_loss_series()
         return series.recon_loss, series.kl_loss, series.kl_weight
-
-    def get_mu_log_var_results(self):
-        series = self.reader.read_latent_series()
-        return series.mu, series.log_var
-    
-    def make_final_mu_log_var_graphs(self):
-        mu, log_var = self.get_mu_log_var_results()
-        graph_list = [(mu[-1], 'mu.png'), (log_var[-1], 'log_var.png')]
-        
-        for data, graph_name in graph_list:
-            plot_data = np.sort(data.numpy())
-            fig, ax = plt.subplots()
-            ax.set_xlabel('Ordered Indices')
-            ax.set_ylabel(graph_name[:-4])
-            ax.set_title('Final '+ graph_name[:-4])
-            ax.scatter(range(len(data)), plot_data, s=3, color='cadetblue')
-            ax.axhline(y=0, color='lightsteelblue')
-            plt.savefig(self.stats_dir / Path(graph_name))
-            logging.info(f" Saved {self.stats_dir / Path(graph_name)}")
-
 
     def test_pareto_curve(self):
         # Read file with recon and kl losses
