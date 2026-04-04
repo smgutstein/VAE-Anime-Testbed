@@ -33,25 +33,6 @@ def set_all_seeds(seed: int, deterministic: bool = False):
         except Exception as e:
             logging.warning(f"Could not enable TF op determinism: {e}")
 
-def read_config_file(filename):
-    '''Reads a configuration file and returns a ConfigParser object.'''
-    config = configparser.ConfigParser()
-    config.read(filename)
-    return config
-
-def is_config_file(filename):
-    try:
-        with open(filename, 'r') as file:
-            for line in file:
-                # Check if the line resembles an INI section header
-                if line.strip().startswith('[') and line.strip().endswith(']'):
-                    return True
-                # Check if the line resembles a key-value pair
-                if '=' in line:
-                    return True
-        return False
-    except FileNotFoundError:
-        return False
     
 def get_git_hash():
     '''Returns git info if available; otherwise returns a safe fallback string.'''

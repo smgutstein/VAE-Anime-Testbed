@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import numpy as np
 
@@ -18,6 +17,9 @@ from VAE_Anime_Datasets import Datasets
 from VAE_Anime_ExperimentRun import ExperimentRun
 from VAE_Anime_Full_Model import VAE_Model
 from VAE_Anime_LossPolicy import build_loss_policy
+from VAE_Anime_RunArtifacts import (latent_diagnostics,
+                                    save_failure_tensors,
+                                    write_run_summary)
 from VAE_Anime_Snapshotter import VAESnapshotter
 from VAE_Anime_Training_Monitor import TrainingMonitor
 
@@ -97,43 +99,6 @@ class VAE_Trainer:
             snapshot_every=self.cfg.snapshot_every,
         )       
 
-    def save_failure_tensors(self, epoch, step, x_batch_train,
-                             mu, log_var, curr_loss_recon, curr_loss_kl,
-                             diagnostics=None, max_items=32):
-        sigma = tf.exp(0.5 * log_var).numpy()
-
-        x_np = x_batch_train.numpy()[:max_items]
-        mu_full = mu.numpy()
-        log_var_full = log_var.numpy()
-
-        mu_np = mu_full[:max_items]
-        log_var_np = log_var_full[:max_items]
-        sigma_np = sigma[:max_items]
-        flat_idx = np.argsort(log_var_full.ravel())[-20:]
-
-        out_path = self.stats_dir / Path(f"failure_tensors_epoch{epoch}_step{step}.npz")
-
-
-        payload = {
-            "epoch": np.array(epoch, dtype=np.int32),
-            "step": np.array(step, dtype=np.int32),
-            "loss_recon": np.array(curr_loss_recon, dtype=np.float32),
-            "loss_kl": np.array(curr_loss_kl, dtype=np.float32),
-            "kl_weight": np.array(self.loss_policy.current_value(), dtype=np.float32),
-            "x_batch_train": x_np,
-            "mu": mu_np,
-            "log_var": log_var_np,
-            "sigma": sigma_np,
-            "top20_log_var_values": log_var_full.ravel()[flat_idx],
-            "top20_sigma_values": sigma.ravel()[flat_idx],
-            "top20_flat_indices": flat_idx,        
-            }
-
-        if diagnostics is not None:
-            payload["diagnostics_text"] = np.array(repr(diagnostics), dtype=object)
-
-        np.savez_compressed(out_path, **payload)
-        logging.error("Saved failure tensors to %s", out_path)
         
     @staticmethod
     @tf.function(reduce_retracing=True)
@@ -226,7 +191,9 @@ class VAE_Trainer:
                             diagnostics,
                         )
 
-                        self.save_failure_tensors(
+                        save_failure_tensors(
+                            stats_dir=self.stats_dir,
+                            loss_policy=self.loss_policy,
                             epoch=epoch,
                             step=step,
                             x_batch_train=x_batch_train,
@@ -320,7 +287,10 @@ class VAE_Trainer:
             logging.info(f"Number of kl_weight changes: {len(weight_update_events)}")
             logging.info(weight_update_events)
 
-            self.write_run_summary(
+            write_run_summary(
+                output_dir=self.output_dir,
+                cfg=self.cfg,
+                loss_policy=self.loss_policy,
                 status="completed",
                 start_time=start_time,
                 end_time=time(),
@@ -330,7 +300,10 @@ class VAE_Trainer:
             )
 
         except Exception as e:
-            self.write_run_summary(
+            write_run_summary(
+                output_dir=self.output_dir,
+                cfg=self.cfg,
+                loss_policy=self.loss_policy,
                 status="failed",
                 start_time=start_time,
                 end_time=time(),
@@ -346,108 +319,13 @@ class VAE_Trainer:
 
     #############################################################
 
-    def write_run_summary(self, status, start_time, end_time,
-                          final_recon=None, final_kl=None,
-                          final_kl_weight=None, error_message=None,
-                          ):
-        
-        summary_path = self.output_dir / "run_summary.json"
-
-        runtime_seconds = None
-        if start_time is not None and end_time is not None:
-            runtime_seconds = float(end_time - start_time)
-
-        summary = {
-            "experiment_dir": str(self.output_dir),
-            "experiment_name": self.cfg.expt_name,
-            "status": status,
-            "error": error_message,
-
-            "config_file": str(self.cfg.config_file),
-            "loss_policy": self.loss_policy.policy_name,
-            "seed": self.cfg.seed,
-            "deterministic": self.cfg.deterministic,
-
-            "epochs": self.cfg.epochs,
-            "learning_rate": self.cfg.learning_rate,
-            "latent_dim": self.cfg.latent_dim,
-            "batch_size": self.cfg.batch_size,
-            "image_size": self.cfg.image_size,
-            "save_net": self.cfg.save_net,
-
-            "beta": self.cfg.beta,
-            "initial_kl_weight": self.cfg.initial_kl_weight,
-            "max_kl_weight": self.cfg.max_kl_weight,
-            "kl_weight_update_factor": self.cfg.kl_weight_update_factor,
-
-            "final_recon_loss": final_recon,
-            "final_kl_loss": final_kl,
-            "final_kl_weight": final_kl_weight,
-
-            "start_time": ctime(start_time) if start_time is not None else None,
-            "end_time": ctime(end_time) if end_time is not None else None,
-            "runtime_seconds": runtime_seconds,
-        }
-
-        summary = {k: json_safe(v) for k, v in summary.items()}
-        with open(summary_path, "w") as f:
-            json.dump(summary, f, indent=2)
-
-        logging.info("Wrote run summary to %s", summary_path)
-
 #############################################################
 
-def json_safe(value):
-    if value is None:
-        return None
-    if isinstance(value, (np.floating,)):
-        return float(value)
-    if isinstance(value, (np.integer,)):
-        return int(value)
-    if isinstance(value, (np.bool_,)):
-        return bool(value)
-    if isinstance(value, Path):
-        return str(value)
-    return value
-
-
-def latent_diagnostics(mu, log_var):
-    sigma = tf.exp(0.5 * log_var)
-
-    def stats(x):
-        x_np = x.numpy()
-        finite = np.isfinite(x_np)
-        finite_vals = x_np[finite]
-        if finite_vals.size == 0:
-            return {
-                "finite_count": 0,
-                "nonfinite_count": x_np.size,
-                "min": None,
-                "max": None,
-                "mean": None,
-                "std": None,
-            }
-        return {
-            "finite_count": int(finite.sum()),
-            "nonfinite_count": int((~finite).sum()),
-            "min": float(finite_vals.min()),
-            "max": float(finite_vals.max()),
-            "mean": float(finite_vals.mean()),
-            "std": float(finite_vals.std()),
-        }
-
-    return {
-        "mu": stats(mu),
-        "log_var": stats(log_var),
-        "sigma": stats(sigma),
-        "largest_log_var": np.sort(log_var.numpy().ravel())[-10:].tolist(),
-        "largest_sigma": np.sort(sigma.numpy().ravel())[-10:].tolist(),
-    }    
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
-    parser.add_argument('-c', '--config_file', type=str, 
+    parser.add_argument('-c', '--config_file', type=str,
                         default='config.ini', help='Config file')
     parser.add_argument("--log", default="INFO", help="Logging level")
 
