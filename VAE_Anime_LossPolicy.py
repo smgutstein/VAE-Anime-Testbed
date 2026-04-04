@@ -103,7 +103,6 @@ class FixedBetaLossPolicy(BaseLossPolicy):
 
     def __init__(self, beta):
         self.beta = float(beta)
-        self.beta_max = float(beta)
         self.kl_weight_update_factor = 0.0
         self.running_window = 1
 
