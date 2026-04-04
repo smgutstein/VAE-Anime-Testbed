@@ -148,14 +148,21 @@ def build_loss_policy(cfg):
     fixed-beta mode reads cfg.beta.
     """
     if cfg.loss_policy == "adaptive_kl":
-        return AdaptiveKLLossPolicy(
-            initial_kl_weight=cfg.initial_kl_weight,
-            max_kl_weight=cfg.max_kl_weight,
-            kl_weight_update_factor=cfg.kl_weight_update_factor,
-            running_window=cfg.running_window,
-        )
+        if (cfg.initial_kl_weight is None or 
+            cfg.max_kl_weight is None or 
+            cfg.kl_weight_update_factor is None or 
+            cfg.running_window is None):
 
+            raise ValueError("adaptive_kl config is incomplete")
+
+        return AdaptiveKLLossPolicy(initial_kl_weight=cfg.initial_kl_weight,
+                                    max_kl_weight=cfg.max_kl_weight,
+                                    kl_weight_update_factor=cfg.kl_weight_update_factor,
+                                    running_window=cfg.running_window)
+    
     if cfg.loss_policy == "fixed_beta":
+        if cfg.beta is None:
+            raise ValueError("fixed_beta config is incomplete")
         return FixedBetaLossPolicy(
             beta=cfg.beta,
         )

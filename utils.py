@@ -240,8 +240,7 @@ def load_and_validate_config(config_file):
 
     required_options = {
         "Training_Parameters": [
-            "epochs", "learning_rate", "loss_policy", "beta",
-            "running_window",
+            "epochs", "learning_rate", "loss_policy", 
         ],
         "Output_Parameters": ["parent_dir", "save_net"],
         "Data_Parameters": [
@@ -259,15 +258,46 @@ def load_and_validate_config(config_file):
     }
 
     for section, options in required_options.items():
+        for option in options:
+            if not config.has_option(section, option):
+                raise ValueError(f"Missing required config option: [{section}] {option}")
 
-        training = "Training_Parameters"
+    training = "Training_Parameters"
+    loss_policy = config.get(training, "loss_policy")
+
+    if loss_policy not in {"adaptive_kl", "fixed_beta"}:
+        raise ValueError(
+            "Training_Parameters.loss_policy must be one of: adaptive_kl, fixed_beta"
+        )
+    
+    if loss_policy == "fixed_beta":
+        if not config.has_option(training, "beta"):
+            raise ValueError(
+                "Missing required config option: [Training_Parameters] beta"
+            )
+
+
+    if loss_policy == "adaptive_kl":
+        if not config.has_option(training, "running_window"):
+            raise ValueError(
+                "Missing required config option: [Training_Parameters] running_window"
+            )
+
         has_new_kl_keys = all(
             config.has_option(training, opt)
-            for opt in ("initial_kl_weight", "max_kl_weight", "kl_weight_update_factor")
+            for opt in (
+                "initial_kl_weight",
+                "max_kl_weight",
+                "kl_weight_update_factor",
+            )
         )
         has_old_kl_keys = all(
             config.has_option(training, opt)
-            for opt in ("kl_adj_factor", "kl_adj_factor_max", "kl_adj_update_factor")
+            for opt in (
+                "kl_adj_factor",
+                "kl_adj_factor_max",
+                "kl_adj_update_factor",
+            )
         )
 
         if not (has_new_kl_keys or has_old_kl_keys):
@@ -276,12 +306,8 @@ def load_and_validate_config(config_file):
                 "[Training_Parameters] initial_kl_weight/max_kl_weight/kl_weight_update_factor "
                 "or legacy kl_adj_factor/kl_adj_factor_max/kl_adj_update_factor"
             )
-        for option in options:
-            if not config.has_option(section, option):
-                raise ValueError(f"Missing required config option: [{section}] {option}")
 
     return config
-
 
 ########################################
 # Config access helpers

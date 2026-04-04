@@ -447,7 +447,7 @@ def latent_diagnostics(mu, log_var):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
-    parser.add_argument('-c', '--config_file', type=str, nargs='?',
+    parser.add_argument('-c', '--config_file', type=str, 
                         default='config.ini', help='Config file')
     parser.add_argument("--log", default="INFO", help="Logging level")
 

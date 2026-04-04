@@ -4,12 +4,11 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from VAE_Anime_ArtifactReader import ArtifactReader
+from VAE_Anime_Config import TrainerConfig
 from VAE_Anime_ResultsIO import read_loss_file_points_io
 from VAE_ParetoFront import ParetoFront
 
-from utils import is_config_file
 from utils import get_experiment_dir
-from utils import read_config_file
 
 
 def get_experiment_label(expt_dir, fallback_label=None):
@@ -17,12 +16,10 @@ def get_experiment_label(expt_dir, fallback_label=None):
     cfg_path = expt_dir / "config.ini"
 
     if cfg_path.is_file():
-        cfg = read_config_file(cfg_path)
-        if cfg.has_option("Output_Parameters", "expt_name"):
-            name = cfg.get("Output_Parameters", "expt_name").strip()
-            if name:
-                return f"{expt_dir.name}: {name}"
-
+        cfg = TrainerConfig.from_file(cfg_path)
+        if cfg.expt_name:
+            return f"{expt_dir.name}: {cfg.expt_name}"
+        
     if fallback_label is not None:
         return f"{expt_dir.name}: {fallback_label}"
 
@@ -163,9 +160,8 @@ if __name__ == "__main__":
 
     # Load the experiment files 
     config_file = args.config_file
-    assert is_config_file(config_file), "Invalid config file"
-    config = read_config_file(config_file)
-    parent_dir = Path(config.get('Output_Parameters', 'parent_dir'))
+    cfg = TrainerConfig.from_file(config_file)
+    parent_dir = cfg.parent_dir
 
 
     e1 = args.expt1

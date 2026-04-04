@@ -18,11 +18,11 @@ class TrainerConfig:
     epochs: int
     learning_rate: float
     loss_policy: str
-    beta: float
-    initial_kl_weight: float
-    max_kl_weight: float
-    kl_weight_update_factor: float
-    running_window: int
+    beta: float | None
+    initial_kl_weight: float | None
+    max_kl_weight: float | None
+    kl_weight_update_factor: float | None
+    running_window: int | None
 
     # Output
     parent_dir: Path
@@ -91,12 +91,31 @@ class TrainerConfig:
             epochs=config.getint("Training_Parameters", "epochs"),
             learning_rate=config.getfloat("Training_Parameters", "learning_rate"),
             loss_policy=config.get("Training_Parameters", "loss_policy"),
-            beta=config.getfloat("Training_Parameters", "beta"),
-            initial_kl_weight=_get_kl_float("initial_kl_weight", "kl_adj_factor"),
-            max_kl_weight=_get_kl_float("max_kl_weight", "kl_adj_factor_max"),
-            kl_weight_update_factor=_get_kl_float("kl_weight_update_factor", 
-                                                  "kl_adj_update_factor"),  
-            running_window=config.getint("Training_Parameters", "running_window"),
+            beta=(
+                config.getfloat("Training_Parameters", "beta")
+                if config.get("Training_Parameters", "loss_policy") == "fixed_beta"
+                else None
+            ),            
+            initial_kl_weight=(
+                _get_kl_float("initial_kl_weight", "kl_adj_factor")
+                if config.get("Training_Parameters", "loss_policy") == "adaptive_kl"
+                else None
+            ),
+            max_kl_weight=(
+                _get_kl_float("max_kl_weight", "kl_adj_factor_max")
+                if config.get("Training_Parameters", "loss_policy") == "adaptive_kl"
+                else None
+            ),
+            kl_weight_update_factor=(
+                _get_kl_float("kl_weight_update_factor", "kl_adj_update_factor")
+                if config.get("Training_Parameters", "loss_policy") == "adaptive_kl"
+                else None
+            ),
+            running_window=(
+                config.getint("Training_Parameters", "running_window")
+                if config.get("Training_Parameters", "loss_policy") == "adaptive_kl"
+                else None
+            ),
 
             # Output
             parent_dir=get_parent_dir(config),
@@ -153,18 +172,32 @@ class TrainerConfig:
             raise ValueError("learning_rate must be > 0")
         if self.loss_policy not in {"adaptive_kl", "fixed_beta"}:
             raise ValueError("loss_policy must be one of: adaptive_kl, fixed_beta")
-        if self.beta < 0:
-            raise ValueError("beta must be >= 0")
 
-        if self.initial_kl_weight < 0:
-            raise ValueError("initial_kl_weight must be >= 0")
-        if self.max_kl_weight < self.initial_kl_weight:
-            raise ValueError("max_kl_weight must be >= initial_kl_weight")
-        if self.kl_weight_update_factor <= 0:
-            raise ValueError("kl_weight_update_factor must be > 0")
-        if self.running_window < 2:
-            raise ValueError("running_window must be >= 2")
+        if self.loss_policy == "fixed_beta":
+            if self.beta is None:
+                raise ValueError("fixed_beta requires beta")
+            if self.beta < 0:
+                raise ValueError("beta must be >= 0")
 
+        if self.loss_policy == "adaptive_kl":
+            if self.initial_kl_weight is None:
+                raise ValueError("adaptive_kl requires initial_kl_weight")
+            if self.max_kl_weight is None:
+                raise ValueError("adaptive_kl requires max_kl_weight")
+            if self.kl_weight_update_factor is None:
+                raise ValueError("adaptive_kl requires kl_weight_update_factor")
+            if self.running_window is None:
+                raise ValueError("adaptive_kl requires running_window")
+
+            if self.initial_kl_weight < 0:
+                raise ValueError("initial_kl_weight must be >= 0")
+            if self.max_kl_weight < self.initial_kl_weight:
+                raise ValueError("max_kl_weight must be >= initial_kl_weight")
+            if self.kl_weight_update_factor <= 0:
+                raise ValueError("kl_weight_update_factor must be > 0")
+            if self.running_window < 2:
+                raise ValueError("running_window must be >= 2")
+            
         if self.batch_size <= 0:
             raise ValueError("batch_size must be > 0")
         if self.image_size <= 0:

@@ -8,14 +8,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
-from utils import find_nan_or_inf_index
+
 from utils import get_experiment_dir
 from utils import get_latest_experiment_dir
-from utils import is_config_file
-from utils import read_config_file
 from utils import setup_logging
 
 from VAE_Anime_ArtifactReader import ArtifactReader
+from VAE_Anime_Config import TrainerConfig
 from VAE_Anime_LatentStatsPlotter import VAELatentStatsPlotter
 from VAE_Anime_MovieBuilder import VAEMovieBuilder
 from VAE_Anime_LossPlotter import VAELossPlotter
@@ -28,10 +27,9 @@ class AnalyzeResults():
     def __init__(self, config_file="config.ini", expt=-1):
 
         # Load the config file
-        assert Path(config_file).exists(), f"{config_file} does not exist"
-        assert is_config_file(config_file), f"{config_file} is invalid config file"
-        self.config_file = config_file
-        self.parent_dir = self.get_parent_dir()
+        self.cfg = TrainerConfig.from_file(config_file)
+        self.config_file = self.cfg.config_file
+        self.parent_dir = self.cfg.parent_dir
 
         if expt != -1:
             # Get the output directory for the specified experiment
@@ -65,11 +63,7 @@ class AnalyzeResults():
                                              stats_dir=self.stats_dir,
                                              movies_dir=self.movies_dir)
 
-        
-
-    def get_parent_dir(self):
-        config = read_config_file(self.config_file)
-        return Path(config.get('Output_Parameters', 'parent_dir'))
+    
 
     def require_artifact(self, path, description):
         if not path.exists():
