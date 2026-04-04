@@ -1,74 +1,88 @@
-import bisect
 import numpy as np
 
 
 class ParetoFront:
-    def __init__(self):
-        self.front = []  # Sorted list of (x, y), minimizing both
+    """
+    2D Pareto frontier for minimization in both coordinates.
 
-    def is_dominated(self, x, y):
-        i = bisect.bisect_left(self.front, (x, -float('inf')))
-        #print(" Proposed Pt:  (",x,", ",y,") :",i)
+    Exact mode:
+        eps_x = 0, eps_y = 0
 
-        # Check if dominated by existing point
-        if len(self.front) == 0 or i==0:
-            return False
-        elif i < len(self.front) and self.front[i][1] <= y:
-            #print("     Rejected: self.front[i][1] =",self.front[i][1], " <= ",y)
-            return True
-        elif i > 0 and self.front[i-1][1] <= y:
-            #print("     Rejected: self.front[i-1][1] =",self.front[i-1][1], " <= ",y)
-            return True
-        return False
-    
+    Epsilon mode:
+        Points are treated as equivalent unless they improve x or y
+        by more than the specified tolerances.
+    """
+
+    def __init__(self, eps_x=0.0, eps_y=0.0):
+        self.front = []
+        self.eps_x = float(eps_x)
+        self.eps_y = float(eps_y)
+
+        if self.eps_x < 0 or self.eps_y < 0:
+            raise ValueError("eps_x and eps_y must be nonnegative")
+
     def clear_front(self):
         self.front = []
 
     def add_points(self, x_pts, y_pts):
+        x = np.asarray(x_pts, dtype=float).ravel()
+        y = np.asarray(y_pts, dtype=float).ravel()
 
-        for x, y in zip(x_pts, y_pts):
-            #print("\nCurr Pts: ", self.front)
-            if self.is_dominated(x, y):
-                continue
+        if x.shape != y.shape:
+            raise ValueError("x_pts and y_pts must have same shape")
 
-            # Find insertion index
-            i = bisect.bisect_left(self.front, (x, y))
-            self.front.insert(i, (x, y))
+        good = np.isfinite(x) & np.isfinite(y)
+        x = x[good]
+        y = y[good]
 
-            # Prune points to the right that are now dominated
-            j = i + 1
-            while j < len(self.front):
-                if self.front[j][1] >= y:
-                   del self.front[j]
-                else:
-                    break
+        if x.size == 0:
+            self.front = []
+            return
 
+        pts = np.column_stack([x, y])
+
+        # Sort by x ascending, then y ascending
+        order = np.lexsort((pts[:, 1], pts[:, 0]))
+        pts = pts[order]
+
+        # Collapse points whose x values are within eps_x of each other.
+        # Keep only the lowest y in each such local x-group.
+        collapsed = []
+        curr_x = pts[0, 0]
+        curr_y = pts[0, 1]
+
+        for i in range(1, len(pts)):
+            x_i, y_i = pts[i]
+
+            if abs(x_i - curr_x) <= self.eps_x:
+                if y_i < curr_y:
+                    curr_y = y_i
+            else:
+                collapsed.append((curr_x, curr_y))
+                curr_x, curr_y = x_i, y_i
+
+        collapsed.append((curr_x, curr_y))
+        pts = np.asarray(collapsed, dtype=float)
+
+        # Keep only points that improve the best y seen so far by > eps_y.
+        front = []
+        best_y = np.inf
+
+        for x_i, y_i in pts:
+            if y_i < best_y - self.eps_y:
+                front.append((x_i, y_i))
+                best_y = y_i
+
+        self.front = front
 
     def get_front(self):
         return self.front
 
+    def get_curve(self):
+        if not self.front:
+            return np.empty((0, 2), dtype=float)
+        return np.asarray(self.front, dtype=float)
 
-    def get_smooth_pareto_curve(self, num_iters=3):
-
-            point_list = self.get_front()
-            pareto_curve = list(point_list) 
-            
-            for curr_iter in range(num_iters):
-                for ctr in range(1,len(pareto_curve)-1):
-
-                    lft_pt = pareto_curve[ctr-1]
-                    center_pt = pareto_curve[ctr]
-                    rgt_pt = pareto_curve[ctr+1]
-                
-                    den = rgt_pt[0] - lft_pt[0]
-                    if den==0:
-                        continue
-                    delta_yeq = (center_pt[0] - lft_pt[0])/den * (rgt_pt[1] - lft_pt[1])
-                    
-                    delta_y12 = (center_pt[1] - lft_pt[1])
-                    
-                    if delta_y12 < delta_yeq:
-                        new_y = lft_pt[1] + delta_yeq
-                        pareto_curve[ctr] = (pareto_curve[ctr][0], new_y)
-
-            return np.array(pareto_curve)
+    def get_smooth_pareto_curve(self, num_iters=0):
+        # Kept only for backward compatibility.
+        return self.get_curve()
