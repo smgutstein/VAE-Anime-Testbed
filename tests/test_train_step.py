@@ -1,0 +1,109 @@
+import numpy as np
+import pytest
+
+
+class _TrainerLikeStub:
+    def __init__(self, vae_model):
+        self.vae = vae_model
+
+
+class TestTrainStepIntegration:
+    def _tiny_vae(self, tmp_path):
+        from VAE_Anime_Full_Model import VAE_Model
+
+        return VAE_Model(
+            enc_input_shape=(16, 16, 3),
+            latent_dim=4,
+            base_filters=8,
+            filter_factors=(1, 2, 4),
+            encode_dense_units=32,
+            kernel_size=3,
+            output_dir=str(tmp_path),
+        )
+
+    def _make_step_context(self, tmp_path, tf, kl_weight_value=0.5):
+        vae_model = self._tiny_vae(tmp_path)
+        trainer_like = _TrainerLikeStub(vae_model)
+
+        x = tf.random.uniform((4, 16, 16, 3), dtype=tf.float32)
+        loss_fn = tf.keras.losses.MeanSquaredError()
+        optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+        kl_weight = tf.Variable(kl_weight_value, dtype=tf.float32, trainable=False)
+        prev_kl = tf.Variable(1.0, dtype=tf.float32, trainable=False)
+
+        # Force model weights to exist before train_step's tf.function runs.
+        _ = vae_model.vae_net(x)
+
+        # Force optimizer slot variables to be created outside tf.function.
+        optimizer.build(vae_model.vae_net.trainable_weights)
+
+        return trainer_like, x, loss_fn, optimizer, kl_weight, prev_kl
+
+    def _run_step(self, tmp_path, tf, kl_weight_value=0.5):
+        from VAE_Anime_Train import VAE_Trainer
+
+        trainer_like, x, loss_fn, optimizer, kl_weight, prev_kl = \
+            self._make_step_context(tmp_path, tf, kl_weight_value=kl_weight_value)
+
+        return VAE_Trainer.train_step(
+            x,
+            kl_weight,
+            prev_kl,
+            trainer_like,
+            loss_fn,
+            optimizer,
+        )
+
+    def test_losses_are_finite(self, tmp_path, tf):
+        loss_recon, loss_kl, *_ = self._run_step(tmp_path, tf)
+
+        assert np.isfinite(loss_recon.numpy())
+        assert np.isfinite(loss_kl.numpy())
+
+    def test_mu_and_log_var_shapes(self, tmp_path, tf):
+        _, _, mu, log_var, *_ = self._run_step(tmp_path, tf)
+
+        assert mu.shape == (4, 4)
+        assert log_var.shape == (4, 4)
+
+    def test_mu_and_log_var_are_finite(self, tmp_path, tf):
+        _, _, mu, log_var, *_ = self._run_step(tmp_path, tf)
+
+        assert bool(tf.reduce_all(tf.math.is_finite(mu)).numpy())
+        assert bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy())
+
+    def test_kl_weight_zero_does_not_cause_nan(self, tmp_path, tf):
+        loss_recon, loss_kl, *_ = self._run_step(tmp_path, tf, kl_weight_value=0.0)
+
+        assert np.isfinite(loss_recon.numpy())
+        assert np.isfinite(loss_kl.numpy())
+
+    def test_nominal_step_is_not_toxic_and_applies_update(self, tmp_path, tf):
+        *_, toxic_step, applied_update = self._run_step(tmp_path, tf)
+
+        assert bool(toxic_step.numpy()) is False
+        assert bool(applied_update.numpy()) is True
+
+    def test_build_step_result_converts_raw_outputs(self, tmp_path, tf):
+        from VAE_Anime_Train import VAE_Trainer
+
+        raw = self._run_step(tmp_path, tf)
+        x_batch_train = tf.zeros((4, 16, 16, 3), dtype=tf.float32)
+
+        result = VAE_Trainer._build_step_result(
+            raw_step_output=raw,
+            x_batch_train=x_batch_train,
+            epoch=3,
+            step=7,
+            kl_weight=0.5,
+        )
+
+        assert result.epoch == 3
+        assert result.step == 7
+        assert result.kl_weight == pytest.approx(0.5)
+        assert isinstance(result.loss_recon, float)
+        assert isinstance(result.loss_kl, float)
+        assert isinstance(result.toxic_step, bool)
+        assert isinstance(result.applied_update, bool)
+        assert result.mu.shape == (4, 4)
+        assert result.log_var.shape == (4, 4)
