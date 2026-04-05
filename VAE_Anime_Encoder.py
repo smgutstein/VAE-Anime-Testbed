@@ -94,8 +94,12 @@ class VAE_Encoder:
 
         # add output Dense networks for mu and log_var, units equal 
         # to the declared latent_dim.
-        mu = tf.keras.layers.Dense(self.latent_dim, name='latent_mu')(x)
-        log_var = tf.keras.layers.Dense(self.latent_dim, name ='latent_log_var')(x)  
+        mu = tf.keras.layers.Dense(self.latent_dim, name='latent_mu',
+                                   kernel_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1e-3),
+                                   bias_initializer=tf.keras.initializers.Zeros(),)(x)
+        log_var = tf.keras.layers.Dense(self.latent_dim, name ='latent_log_var',
+                                        kernel_initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1e-3),
+                                        bias_initializer=tf.keras.initializers.Constant(-1.0),)(x)  
 
         return mu, log_var
     
