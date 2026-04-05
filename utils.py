@@ -12,27 +12,6 @@ import time
 
 from pathlib import Path
 
-def set_all_seeds(seed: int, deterministic: bool = False):
-    """Set Python, NumPy, and TensorFlow seeds.
-
-    Args:
-        seed: Integer seed value.
-        deterministic: If True, request more deterministic TF behavior.
-            This can reduce performance and is not guaranteed to make
-            every GPU op bitwise identical.
-    """
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.keras.utils.set_random_seed(seed)
-
-    if deterministic:
-        try:
-            tf.config.experimental.enable_op_determinism()
-        except Exception as e:
-            logging.warning(f"Could not enable TF op determinism: {e}")
-
     
 def get_git_hash():
     '''Returns git info if available; otherwise returns a safe fallback string.'''

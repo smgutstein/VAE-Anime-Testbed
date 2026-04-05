@@ -1,13 +1,13 @@
 import argparse
 import logging
 import numpy as np
+import random
 
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"   # hide INFO, WARNING, and most ERROR logs
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # removes the oneDNN startup note
 import tensorflow as tf
 
-from collections import deque
 from datetime import timedelta
 from pathlib import Path
 from time import time, ctime
@@ -18,18 +18,35 @@ from VAE_Anime_Datasets import Datasets
 from VAE_Anime_ExperimentRun import ExperimentRun
 from VAE_Anime_Full_Model import VAE_Model
 from VAE_Anime_LossPolicy import build_loss_policy
-from VAE_Anime_RunArtifacts import (latent_diagnostics,
-                                    save_failure_history,
-                                    save_failure_tensors,
-                                    write_run_summary)
+from VAE_Anime_RunArtifacts import write_run_summary
 from VAE_Anime_Snapshotter import VAESnapshotter
+from VAE_Anime_StepGuard import (StepGuard, StepResult,)
 from VAE_Anime_Training_Monitor import TrainingMonitor
 
-from utils import set_all_seeds
 from utils import setup_logging
 
-class TrainingDivergedError(RuntimeError):
-    pass
+
+def _set_all_seeds(seed: int, deterministic: bool = False):
+    """Set Python, NumPy, and TensorFlow seeds.
+
+    Args:
+        seed: Integer seed value.
+        deterministic: If True, request more deterministic TF behavior.
+            This can reduce performance and is not guaranteed to make
+            every GPU op bitwise identical.
+    """
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.keras.utils.set_random_seed(seed)
+
+    if deterministic:
+        try:
+            tf.config.experimental.enable_op_determinism()
+        except Exception as e:
+            logging.warning(f"Could not enable TF op determinism: {e}")
+
 
 class VAE_Trainer:
     """Class to train the VAE model on the anime faces dataset."""
@@ -41,7 +58,7 @@ class VAE_Trainer:
         self.cfg = TrainerConfig.from_file(config_file)
 
         # Make run randomness explicit and repeatable
-        set_all_seeds(self.cfg.seed, deterministic=self.cfg.deterministic)
+        _set_all_seeds(self.cfg.seed, deterministic=self.cfg.deterministic)
         logging.info(
             f"Using random seed {self.cfg.seed} "
             f"(deterministic={self.cfg.deterministic})"
@@ -106,6 +123,15 @@ class VAE_Trainer:
         self.monitor = TrainingMonitor(
             stats_dir=self.stats_dir,
             snapshot_every=self.cfg.snapshot_every,
+        )
+
+        self.step_guard = StepGuard(
+            stats_dir=self.stats_dir,
+            loss_policy=self.loss_policy,
+            optimizer=self.optimizer,
+            recent_good_maxlen=8,
+            lr_backoff=0.5,
+            lr_floor=1e-6,
         )
 
     @staticmethod
@@ -199,6 +225,42 @@ class VAE_Trainer:
             applied_update,
         )
 
+    @staticmethod
+    def _build_step_result(raw_step_output, x_batch_train, epoch, step, kl_weight):
+        (
+            loss_recon,
+            loss_kl,
+            mu,
+            log_var,
+            grad_norm,
+            max_log_var,
+            min_log_var,
+            max_abs_mu,
+            kl_jump_ratio,
+            toxic_step,
+            applied_update,
+        ) = raw_step_output
+
+        return StepResult(
+            epoch=int(epoch),
+            step=int(step),
+            kl_weight=float(kl_weight),
+            x_batch_train=x_batch_train,
+            mu=mu,
+            log_var=log_var,
+            loss_recon=float(loss_recon.numpy()),
+            loss_kl=float(loss_kl.numpy()),
+            grad_norm=float(grad_norm.numpy()),
+            max_log_var=float(max_log_var.numpy()),
+            min_log_var=float(min_log_var.numpy()),
+            max_abs_mu=float(max_abs_mu.numpy()),
+            kl_jump_ratio=float(kl_jump_ratio.numpy()),
+            toxic_step=bool(toxic_step.numpy()),
+            applied_update=bool(applied_update.numpy()),
+            mu_finite=bool(tf.reduce_all(tf.math.is_finite(mu)).numpy()),
+            log_var_finite=bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy()),
+        )
+
     def train_loop(self):
         start_time = time()
         logging.info("Start Time: %s" % ctime())
@@ -206,7 +268,6 @@ class VAE_Trainer:
         last_recon = None
         last_kl = None
         last_kl_weight = self.loss_policy.current_value()
-        recent_good_steps = deque(maxlen=8)
 
         weight_update_events = [(0, 0, self.loss_policy.current_update_factor())]
 
@@ -221,213 +282,42 @@ class VAE_Trainer:
 
                 for step, x_batch_train in enumerate(self.data.training_dataset):
                     self.kl_weight_tensor.assign(self.loss_policy.current_value())
+                    curr_kl_weight_before_update = float(self.loss_policy.current_value())
 
-                    (loss_recon, loss_kl, mu, log_var, grad_norm, max_log_var,
-                     min_log_var, max_abs_mu, kl_jump_ratio, toxic_step,
-                     applied_update,) = \
-                    self.train_step(x_batch_train, self.kl_weight_tensor,
-                                    self.prev_kl_tensor, self, self.mse_loss,
-                                    self.optimizer,)
-
-                    curr_loss_recon = float(loss_recon.numpy())
-                    curr_loss_kl = float(loss_kl.numpy())
-                    grad_norm_val = float(grad_norm.numpy())
-                    max_log_var_val = float(max_log_var.numpy())
-                    min_log_var_val = float(min_log_var.numpy())
-                    max_abs_mu_val = float(max_abs_mu.numpy())
-                    kl_jump_ratio_val = float(kl_jump_ratio.numpy())
-                    toxic_step_val = bool(toxic_step.numpy())
-                    applied_update_val = bool(applied_update.numpy())
-
-                    mu_finite = bool(tf.reduce_all(tf.math.is_finite(mu)).numpy())
-                    log_var_finite = bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy())
-
-                    loss_bad = (
-                        np.isnan(curr_loss_recon)
-                        or np.isnan(curr_loss_kl)
-                        or np.isinf(curr_loss_recon)
-                        or np.isinf(curr_loss_kl)
-                    )
-                    latent_bad = (not mu_finite) or (not log_var_finite)
-
-                    suspicious = (
-                        (not loss_bad)
-                        and (not latent_bad)
-                        and (
-                            curr_loss_kl > 1e6
-                            or np.max(np.abs(mu.numpy())) > 1e4
-                            or np.max(np.abs(log_var.numpy())) > 50
-                        )
+                    raw_step_output = self.train_step(
+                        x_batch_train,
+                        self.kl_weight_tensor,
+                        self.prev_kl_tensor,
+                        self,
+                        self.mse_loss,
+                        self.optimizer,
                     )
 
-                    if (not loss_bad) and (not latent_bad):
-                        recent_good_steps.append(
-                            {
-                                "epoch": int(epoch),
-                                "step": int(step),
-                                "x_batch_train": tf.identity(x_batch_train),
-                                "mu": tf.identity(mu),
-                                "log_var": tf.identity(log_var),
-                                "curr_loss_recon": float(curr_loss_recon),
-                                "curr_loss_kl": float(curr_loss_kl),
-                                "kl_weight": float(self.loss_policy.current_value()),
-                            }
-                        )
+                    step_result = self._build_step_result(
+                        raw_step_output=raw_step_output,
+                        x_batch_train=x_batch_train,
+                        epoch=epoch,
+                        step=step,
+                        kl_weight=curr_kl_weight_before_update,
+                    )
 
-                    if suspicious:
-                        diagnostics = latent_diagnostics(mu, log_var)
-                        diagnostics["note"] = "Suspicious finite step saved before divergence"
-                        diagnostics["saved_epoch"] = int(epoch)
-                        diagnostics["saved_step"] = int(step)
-                        diagnostics["saved_kl_weight"] = float(
-                            self.loss_policy.current_value()
-                        )
+                    decision = self.step_guard.handle_step(step_result)
 
-                        save_failure_tensors(
-                            stats_dir=self.stats_dir,
-                            loss_policy=self.loss_policy,
-                            epoch=epoch,
-                            step=step,
-                            x_batch_train=x_batch_train,
-                            mu=mu,
-                            log_var=log_var,
-                            curr_loss_recon=curr_loss_recon,
-                            curr_loss_kl=curr_loss_kl,
-                            diagnostics=diagnostics,
-                            file_tag="suspicious",
-                        )
+                    if decision.should_raise:
+                        raise decision.exception
 
-                    if loss_bad or latent_bad:
-                        diagnostics = latent_diagnostics(mu, log_var)
-
-                        logging.error(
-                            "Training diverged at epoch=%d step=%d recon=%s kl=%s "
-                            "kl_weight=%s diagnostics=%s",
-                            epoch,
-                            step,
-                            curr_loss_recon,
-                            curr_loss_kl,
-                            self.loss_policy.current_value(),
-                            diagnostics,
-                        )
-
-                        if recent_good_steps:
-                            last_good = recent_good_steps[-1]
-                            diagnostics["note"] = (
-                                "Crash detected; saved last known finite step "
-                                "instead of crashing step"
-                            )
-                            diagnostics["crash_epoch"] = int(epoch)
-                            diagnostics["crash_step"] = int(step)
-                            diagnostics["crash_recon"] = float(curr_loss_recon)
-                            diagnostics["crash_kl"] = float(curr_loss_kl)
-                            diagnostics["crash_kl_weight"] = float(
-                                self.loss_policy.current_value()
-                            )
-                            diagnostics["saved_epoch"] = int(last_good["epoch"])
-                            diagnostics["saved_step"] = int(last_good["step"])
-                            diagnostics["saved_kl_weight"] = float(last_good["kl_weight"])
-
-                            save_failure_tensors(
-                                stats_dir=self.stats_dir,
-                                loss_policy=self.loss_policy,
-                                epoch=last_good["epoch"],
-                                step=last_good["step"],
-                                x_batch_train=last_good["x_batch_train"],
-                                mu=last_good["mu"],
-                                log_var=last_good["log_var"],
-                                curr_loss_recon=last_good["curr_loss_recon"],
-                                curr_loss_kl=last_good["curr_loss_kl"],
-                                diagnostics=diagnostics,
-                                file_tag="last_good_before_crash",
-                            )
-
-                            save_failure_history(
-                                stats_dir=self.stats_dir,
-                                recent_good_steps=recent_good_steps,
-                            )
-                        else:
-                            diagnostics["note"] = (
-                                "No earlier finite step available; saved crashing step"
-                            )
-                            save_failure_tensors(
-                                stats_dir=self.stats_dir,
-                                loss_policy=self.loss_policy,
-                                epoch=epoch,
-                                step=step,
-                                x_batch_train=x_batch_train,
-                                mu=mu,
-                                log_var=log_var,
-                                curr_loss_recon=curr_loss_recon,
-                                curr_loss_kl=curr_loss_kl,
-                                diagnostics=diagnostics,
-                                file_tag="crash_step",
-                            )
-
-                        raise TrainingDivergedError(
-                            f"Training diverged at epoch={epoch}, step={step}, "
-                            f"recon={curr_loss_recon}, kl={curr_loss_kl}, "
-                            f"kl_weight={self.loss_policy.current_value()}"
-                        )
-
-                    if toxic_step_val:
-                        old_lr = float(self.optimizer.learning_rate.numpy())
-                        new_lr = max(old_lr * 0.5, 1e-6)
-                        self.optimizer.learning_rate.assign(new_lr)
-
-                        diagnostics = latent_diagnostics(mu, log_var)
-                        diagnostics["note"] = (
-                            "Trip-wire fired; update skipped; accepted training state unchanged"
-                        )
-                        diagnostics["kl_jump_ratio"] = kl_jump_ratio_val
-                        diagnostics["grad_norm"] = grad_norm_val
-                        diagnostics["max_log_var"] = max_log_var_val
-                        diagnostics["min_log_var"] = min_log_var_val
-                        diagnostics["max_abs_mu"] = max_abs_mu_val
-                        diagnostics["old_lr"] = old_lr
-                        diagnostics["new_lr"] = new_lr
-
-                        logging.error(
-                            "Trip-wire fired at epoch=%d step=%d; skipped update; "
-                            "recon=%g kl=%g kl_jump_ratio=%g max_log_var=%g "
-                            "min_log_var=%g max_abs_mu=%g grad_norm=%g "
-                            "kl_weight=%g lr %g -> %g",
-                            epoch,
-                            step,
-                            curr_loss_recon,
-                            curr_loss_kl,
-                            kl_jump_ratio_val,
-                            max_log_var_val,
-                            min_log_var_val,
-                            max_abs_mu_val,
-                            grad_norm_val,
-                            self.loss_policy.current_value(),
-                            old_lr,
-                            new_lr,
-                        )
-
-                        save_failure_tensors(
-                            stats_dir=self.stats_dir,
-                            loss_policy=self.loss_policy,
-                            epoch=epoch,
-                            step=step,
-                            x_batch_train=x_batch_train,
-                            mu=mu,
-                            log_var=log_var,
-                            curr_loss_recon=curr_loss_recon,
-                            curr_loss_kl=curr_loss_kl,
-                            diagnostics=diagnostics,
-                            file_tag="tripwire_skip",
-                        )
-
+                    if decision.should_continue:
                         continue
 
-                    if applied_update_val and np.isfinite(curr_loss_kl) and curr_loss_kl > 0.0:
-                        self.prev_kl_tensor.assign(curr_loss_kl)
+                    if decision.should_update_prev_kl:
+                        self.prev_kl_tensor.assign(decision.prev_kl_value)
+
+                    curr_loss_recon = step_result.loss_recon
+                    curr_loss_kl = step_result.loss_kl
 
                     last_recon = curr_loss_recon
                     last_kl = curr_loss_kl
-                    last_kl_weight = self.loss_policy.current_value()
+                    last_kl_weight = curr_kl_weight_before_update
 
                     update_info = self.loss_policy.update(curr_loss_recon, curr_loss_kl)
                     weight_direction = update_info["weight_direction"]
@@ -475,10 +365,10 @@ class VAE_Trainer:
                     )
 
                     self.monitor.record_latent_stats(
-                        mu_mean=tf.reduce_mean(mu, 0),
-                        log_var_mean=tf.reduce_mean(log_var, 0),
-                        mu_var=tf.math.reduce_variance(mu, 0),
-                        log_var_var=tf.math.reduce_variance(log_var, 0),
+                        mu_mean=tf.reduce_mean(step_result.mu, 0),
+                        log_var_mean=tf.reduce_mean(step_result.log_var, 0),
+                        mu_var=tf.math.reduce_variance(step_result.mu, 0),
+                        log_var_var=tf.math.reduce_variance(step_result.log_var, 0),
                     )
 
                     self.monitor.maybe_flush_step(step)
@@ -538,6 +428,7 @@ class VAE_Trainer:
 
     #############################################################
 
+
 #############################################################
 
 
@@ -560,7 +451,7 @@ if __name__ == "__main__":
             validation_dataset=vae.data.validation_dataset,
             vae_net=vae.vae.vae_net,
             decoder_net=vae.vae.decoder.decoder_net,
-        )    
+        )
     vae.train_loop()
 
     if vae.cfg.run_analysis:
