@@ -109,3 +109,45 @@ def test_divergence_with_recent_good_step_saves_last_good_and_history(tmp_path, 
     assert len(tensor_calls) == 1
     assert tensor_calls[0]["file_tag"] == "last_good_before_crash"
     assert len(history_calls) == 1
+
+def test_repeated_tripwires_raise_after_threshold(tmp_path, monkeypatch, tf):
+    import VAE_Anime_StepGuard as sg
+    from VAE_Anime_StepGuard import StepGuard, TrainingDivergedError
+
+    save_calls = []
+
+    monkeypatch.setattr(
+        sg,
+        "save_failure_tensors",
+        lambda **kwargs: save_calls.append(kwargs),
+    )
+
+    guard = StepGuard(
+        stats_dir=tmp_path,
+        loss_policy=DummyLossPolicy(),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+        max_consecutive_tripwires=3,
+    )
+
+    result = _make_step_result(
+        tf,
+        toxic_step=True,
+        applied_update=False,
+        kl_jump_ratio=250.0,
+        max_log_var=21.0,
+    )
+
+    d1 = guard.handle_step(result)
+    assert d1.should_continue is True
+    assert d1.should_raise is False
+
+    d2 = guard.handle_step(result)
+    assert d2.should_continue is True
+    assert d2.should_raise is False
+
+    d3 = guard.handle_step(result)
+    assert d3.should_raise is True
+    assert isinstance(d3.exception, TrainingDivergedError)
+
+    assert len(save_calls) == 3
+    assert float(guard.optimizer.learning_rate.numpy()) == pytest.approx(1.25e-4)

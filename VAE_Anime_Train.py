@@ -132,6 +132,7 @@ class VAE_Trainer:
             recent_good_maxlen=8,
             lr_backoff=0.5,
             lr_floor=1e-6,
+            max_consecutive_tripwires=3,
         )
 
     @staticmethod
