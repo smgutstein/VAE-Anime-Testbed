@@ -376,7 +376,7 @@ class VAE_Trainer:
 
                     curr_time = time()
                     tot_delta_time = str(timedelta(seconds=curr_time - start_time))
-                    out_str = f"Epoch: {epoch} step: {step} "
+                    out_str = f"Epoch: {epoch} of {self.cfg.epochs} step: {step} "
                     out_str += f"recon loss = {curr_loss_recon:.4f} "
                     out_str += f"kl_loss = {curr_loss_kl:.4e} "
                     out_str += f"{weight_direction} kl_weight = {curr_kl_weight:.4e} "
