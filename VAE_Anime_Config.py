@@ -24,6 +24,11 @@ class TrainerConfig:
     kl_weight_update_factor: float | None
     running_window: int | None
 
+    # Safety / trip-wire
+    tripwire_lr_backoff: float
+    tripwire_lr_floor: float
+    max_consecutive_tripwires: int
+
     # Output
     parent_dir: Path
     save_net: bool
@@ -46,6 +51,7 @@ class TrainerConfig:
 
     # Monitoring
     snapshot_every: int
+    flush_every_epochs: int
     train_preview_count: int
     valid_preview_count: int
     take_initial_snapshot: bool
@@ -60,6 +66,7 @@ class TrainerConfig:
     def from_file(cls, config_file="config.ini"):
         config_path = Path(config_file)
         config = load_and_validate_config(config_path)
+        safety_section = "Safety_Parameters"
 
         def _get_kl_float(new_name, old_name):
             section = "Training_Parameters"
@@ -117,6 +124,17 @@ class TrainerConfig:
                 else None
             ),
 
+            # Safety / trip-wire
+            tripwire_lr_backoff=config.getfloat(
+                safety_section, "tripwire_lr_backoff", fallback=0.5
+            ),
+            tripwire_lr_floor=config.getfloat(
+                safety_section, "tripwire_lr_floor", fallback=1e-6
+            ),
+            max_consecutive_tripwires=config.getint(
+                safety_section, "max_consecutive_tripwires", fallback=3
+            ),
+
             # Output
             parent_dir=get_parent_dir(config),
             save_net=parse_bool(config.get("Output_Parameters", "save_net"), "save_net"),
@@ -142,6 +160,9 @@ class TrainerConfig:
 
             # Monitoring
             snapshot_every=config.getint("Monitoring_Parameters", "snapshot_every"),
+            flush_every_epochs=config.getint(
+                "Monitoring_Parameters", "flush_every_epochs", fallback=100
+            ),
             train_preview_count=config.getint("Monitoring_Parameters", "train_preview_count"),
             valid_preview_count=config.getint("Monitoring_Parameters", "valid_preview_count"),
             take_initial_snapshot=parse_bool(
@@ -198,6 +219,13 @@ class TrainerConfig:
             if self.running_window < 2:
                 raise ValueError("running_window must be >= 2")
             
+        if self.tripwire_lr_backoff <= 0:
+            raise ValueError("tripwire_lr_backoff must be > 0")
+        if self.tripwire_lr_floor <= 0:
+            raise ValueError("tripwire_lr_floor must be > 0")
+        if self.max_consecutive_tripwires <= 0:
+            raise ValueError("max_consecutive_tripwires must be > 0")
+
         if self.batch_size <= 0:
             raise ValueError("batch_size must be > 0")
         if self.image_size <= 0:
@@ -220,6 +248,8 @@ class TrainerConfig:
 
         if self.snapshot_every <= 0:
             raise ValueError("snapshot_every must be > 0")
+        if self.flush_every_epochs <= 0:
+            raise ValueError("flush_every_epochs must be > 0")
         if self.train_preview_count < 0:
             raise ValueError("train_preview_count must be >= 0")
         if self.valid_preview_count < 0:

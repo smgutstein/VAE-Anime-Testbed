@@ -130,9 +130,9 @@ class VAE_Trainer:
             loss_policy=self.loss_policy,
             optimizer=self.optimizer,
             recent_good_maxlen=8,
-            lr_backoff=0.5,
-            lr_floor=1e-6,
-            max_consecutive_tripwires=3,
+            lr_backoff=self.cfg.tripwire_lr_backoff,
+            lr_floor=self.cfg.tripwire_lr_floor,
+            max_consecutive_tripwires=self.cfg.max_consecutive_tripwires,
         )
 
     @staticmethod
@@ -283,7 +283,7 @@ class VAE_Trainer:
             for epoch in range(self.cfg.epochs):
                 logging.info("Start of epoch %d at %s" % (epoch, ctime()))
 
-                if (epoch + 1) % 100 == 0:
+                if (epoch + 1) % self.cfg.flush_every_epochs == 0:
                     self.monitor.flush()
                     logging.info("File Buffers Flushed")
 
