@@ -158,8 +158,14 @@ class VAE_Trainer:
             loss_tot = loss_recon + kl_weight_tensor * loss_kl
 
         grads = tape.gradient(loss_tot, model.trainable_weights)
-        grads, grad_norm = tf.clip_by_global_norm(grads, 5.0)
 
+        non_none_grads = [g for g in grads if g is not None]
+        grad_norm = (
+            tf.linalg.global_norm(non_none_grads)
+            if non_none_grads
+            else tf.constant(0.0, dtype=tf.float32)
+        )
+        
         finite_losses = (
             tf.math.is_finite(loss_recon)
             & tf.math.is_finite(loss_kl)
