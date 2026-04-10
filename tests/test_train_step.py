@@ -2,9 +2,17 @@ import numpy as np
 import pytest
 
 
+class _CfgStub:
+    max_grad_norm = 5.0
+    step_guard_kl_jump_ratio_threshold = 100.0
+    step_guard_kl_abs_threshold = 1e6
+    step_guard_max_log_var_threshold = 20.0
+
+
 class _TrainerLikeStub:
     def __init__(self, vae_model):
         self.vae = vae_model
+        self.cfg = _CfgStub()
 
 
 class TestTrainStepIntegration:
@@ -79,9 +87,10 @@ class TestTrainStepIntegration:
         assert np.isfinite(loss_kl.numpy())
 
     def test_nominal_step_is_not_toxic_and_applies_update(self, tmp_path, tf):
-        *_, toxic_step, applied_update = self._run_step(tmp_path, tf)
+        *_, toxic_step, toxic_reasons, applied_update = self._run_step(tmp_path, tf)
 
         assert bool(toxic_step.numpy()) is False
+        assert toxic_reasons.shape[0] == 0
         assert bool(applied_update.numpy()) is True
 
     def test_build_step_result_converts_raw_outputs(self, tmp_path, tf):
@@ -104,6 +113,7 @@ class TestTrainStepIntegration:
         assert isinstance(result.loss_recon, float)
         assert isinstance(result.loss_kl, float)
         assert isinstance(result.toxic_step, bool)
+        assert isinstance(result.toxic_reasons, tuple)
         assert isinstance(result.applied_update, bool)
         assert result.mu.shape == (4, 4)
         assert result.log_var.shape == (4, 4)

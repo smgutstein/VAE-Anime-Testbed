@@ -134,6 +134,14 @@ class TestTrainerConfig:
         assert cfg.running_window == 20
         assert cfg.beta is None
 
+    def test_safety_fields_load_with_correct_types(self, tmp_path):
+        cfg_file = write_config_text(tmp_path, make_config_ini_text())
+        cfg = self.TrainerConfig.from_file(cfg_file)
+        assert isinstance(cfg.max_grad_norm, float)
+        assert isinstance(cfg.step_guard_kl_jump_ratio_threshold, float)
+        assert isinstance(cfg.step_guard_kl_abs_threshold, float)
+        assert isinstance(cfg.step_guard_max_log_var_threshold, float)
+
     def test_filter_factors_parsed_as_tuple_of_ints(self, tmp_path):
         cfg = self.TrainerConfig.from_file(write_config_text(tmp_path, make_config_ini_text(filter_factors="1, 2, 4")))
         assert cfg.filter_factors == (1, 2, 4)
@@ -169,6 +177,20 @@ class TestTrainerConfig:
         ],
     )
     def test_invalid_field_values_raise(self, tmp_path, override, match):
+        cfg_file = write_config_text(tmp_path, make_config_ini_text(**override))
+        with pytest.raises(ValueError, match=match):
+            self.TrainerConfig.from_file(cfg_file)
+
+    @pytest.mark.parametrize(
+        "override,match",
+        [
+            ({"max_grad_norm": "0"}, "max_grad_norm"),
+            ({"step_guard_kl_jump_ratio_threshold": "0"}, "step_guard_kl_jump_ratio_threshold"),
+            ({"step_guard_kl_abs_threshold": "0"}, "step_guard_kl_abs_threshold"),
+            ({"step_guard_max_log_var_threshold": "0"}, "step_guard_max_log_var_threshold"),
+        ],
+    )
+    def test_invalid_safety_fields_raise(self, tmp_path, override, match):
         cfg_file = write_config_text(tmp_path, make_config_ini_text(**override))
         with pytest.raises(ValueError, match=match):
             self.TrainerConfig.from_file(cfg_file)

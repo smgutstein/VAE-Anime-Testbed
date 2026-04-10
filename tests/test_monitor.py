@@ -22,6 +22,10 @@ def test_training_monitor_flushes_buffers_to_artifacts(tmp_path):
         max_kl_weight_seen=0.01,
         min_kl_weight_seen=0.01,
         window_len=1,
+        kl_jump_ratio=1.0,
+        max_log_var=0.0,
+        min_log_var=0.0,
+        max_grad_norm=5.0,
     )
     monitor.record_losses(1.0, 0.1, 0.01)
     monitor.record_latent_stats(

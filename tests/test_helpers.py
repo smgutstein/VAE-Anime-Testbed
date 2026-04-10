@@ -45,6 +45,16 @@ def write_minimal_config(path: Path, parent_dir: Path, use_legacy_kl_names: bool
         "kernel_size": "3",
     }
 
+    cfg["Safety_Parameters"] = {
+        "max_grad_norm": "5.0",
+        "step_guard_kl_jump_ratio_threshold": "100.0",
+        "step_guard_kl_abs_threshold": "1000000.0",
+        "step_guard_max_log_var_threshold": "20.0",
+        "tripwire_lr_backoff": "0.5",
+        "tripwire_lr_floor": "1e-6",
+        "max_consecutive_tripwires": "3",
+    }
+
     cfg["Monitoring_Parameters"] = {
         "snapshot_every": "1",
         "train_preview_count": "4",
@@ -104,6 +114,13 @@ def make_config_ini_text(
     filter_factors="1, 2, 4",
     encode_dense_units="64",
     kernel_size="3",
+    max_grad_norm="5.0",
+    step_guard_kl_jump_ratio_threshold="100.0",
+    step_guard_kl_abs_threshold="1000000.0",
+    step_guard_max_log_var_threshold="20.0",
+    tripwire_lr_backoff="0.5",
+    tripwire_lr_floor="1e-6",
+    max_consecutive_tripwires="3",
     snapshot_every="100",
     train_preview_count="4",
     valid_preview_count="4",
@@ -118,6 +135,7 @@ def make_config_ini_text(
     include_data=True,
     include_model=True,
     include_monitoring=True,
+    include_safety=True,
 ):
     parts = []
 
@@ -166,6 +184,20 @@ def make_config_ini_text(
         parts.append(f"filter_factors = {filter_factors}")
         parts.append(f"encode_dense_units = {encode_dense_units}")
         parts.append(f"kernel_size = {kernel_size}")
+
+    if include_safety:
+        parts.append("[Safety_Parameters]")
+        parts.append(f"max_grad_norm = {max_grad_norm}")
+        parts.append(
+            f"step_guard_kl_jump_ratio_threshold = {step_guard_kl_jump_ratio_threshold}"
+        )
+        parts.append(f"step_guard_kl_abs_threshold = {step_guard_kl_abs_threshold}")
+        parts.append(
+            f"step_guard_max_log_var_threshold = {step_guard_max_log_var_threshold}"
+        )
+        parts.append(f"tripwire_lr_backoff = {tripwire_lr_backoff}")
+        parts.append(f"tripwire_lr_floor = {tripwire_lr_floor}")
+        parts.append(f"max_consecutive_tripwires = {max_consecutive_tripwires}")
 
     if include_monitoring:
         parts.append("[Monitoring_Parameters]")

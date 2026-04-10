@@ -29,6 +29,7 @@ def _make_step_result(tf, **overrides):
         max_abs_mu=0.0,
         kl_jump_ratio=1.0,
         toxic_step=False,
+        toxic_reasons=(),
         applied_update=True,
         mu_finite=True,
         log_var_finite=True,
@@ -69,7 +70,14 @@ def test_tripwire_skip_halves_lr_requests_continue_and_saves_artifact(tmp_path, 
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     )
 
-    result = _make_step_result(tf, toxic_step=True, applied_update=False, kl_jump_ratio=250.0, max_log_var=21.0)
+    result = _make_step_result(
+        tf,
+        toxic_step=True,
+        toxic_reasons=("kl_jump_ratio", "max_log_var"),
+        applied_update=False,
+        kl_jump_ratio=250.0,
+        max_log_var=21.0,
+    )
     decision = guard.handle_step(result)
 
     assert decision.should_continue is True
@@ -78,6 +86,10 @@ def test_tripwire_skip_halves_lr_requests_continue_and_saves_artifact(tmp_path, 
     assert float(guard.optimizer.learning_rate.numpy()) == pytest.approx(5e-4)
     assert len(save_calls) == 1
     assert save_calls[0]["file_tag"] == "tripwire_skip"
+    assert tuple(save_calls[0]["diagnostics"]["tripwire_tests_triggered"].tolist()) == (
+        "kl_jump_ratio",
+        "max_log_var",
+    )
 
 
 def test_divergence_with_recent_good_step_saves_last_good_and_history(tmp_path, monkeypatch, tf):
@@ -132,6 +144,7 @@ def test_repeated_tripwires_raise_after_threshold(tmp_path, monkeypatch, tf):
     result = _make_step_result(
         tf,
         toxic_step=True,
+        toxic_reasons=("kl_jump_ratio", "max_log_var"),
         applied_update=False,
         kl_jump_ratio=250.0,
         max_log_var=21.0,

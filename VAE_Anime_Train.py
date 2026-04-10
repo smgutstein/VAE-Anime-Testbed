@@ -133,6 +133,9 @@ class VAE_Trainer:
             lr_backoff=self.cfg.tripwire_lr_backoff,
             lr_floor=self.cfg.tripwire_lr_floor,
             max_consecutive_tripwires=self.cfg.max_consecutive_tripwires,
+            kl_jump_ratio_threshold=self.cfg.step_guard_kl_jump_ratio_threshold,
+            kl_abs_threshold=self.cfg.step_guard_kl_abs_threshold,
+            max_log_var_threshold=self.cfg.step_guard_max_log_var_threshold,
         )
 
     @staticmethod
@@ -165,7 +168,15 @@ class VAE_Trainer:
             if non_none_grads
             else tf.constant(0.0, dtype=tf.float32)
         )
-        
+
+        max_grad_norm = vae_obj.cfg.max_grad_norm
+        kl_jump_ratio_threshold = vae_obj.cfg.step_guard_kl_jump_ratio_threshold
+        kl_abs_threshold = vae_obj.cfg.step_guard_kl_abs_threshold
+        max_log_var_threshold = vae_obj.cfg.step_guard_max_log_var_threshold
+
+        if max_grad_norm is not None:
+            grads, _ = tf.clip_by_global_norm(grads, max_grad_norm)
+
         finite_losses = (
             tf.math.is_finite(loss_recon)
             & tf.math.is_finite(loss_kl)
@@ -195,9 +206,29 @@ class VAE_Trainer:
         )
         kl_jump_ratio = loss_kl / prev_kl_safe
 
-        kl_jump_bad = kl_jump_ratio > 100.0
-        kl_abs_bad = loss_kl > 1e6
-        log_var_bad = max_log_var > 20.0
+        kl_jump_bad = kl_jump_ratio > kl_jump_ratio_threshold
+        kl_abs_bad = loss_kl > kl_abs_threshold
+        log_var_bad = max_log_var > max_log_var_threshold
+
+        def _reason_if(flag, name):
+            return tf.cond(
+                flag,
+                lambda: tf.constant([name]),
+                lambda: tf.constant([], dtype=tf.string),
+            )
+
+        toxic_reasons = tf.concat(
+            [
+                _reason_if(tf.logical_not(finite_losses), "nonfinite_losses"),
+                _reason_if(tf.logical_not(finite_mu), "mu_nonfinite"),
+                _reason_if(tf.logical_not(finite_log_var), "log_var_nonfinite"),
+                _reason_if(tf.logical_not(finite_grads), "grad_nonfinite"),
+                _reason_if(kl_jump_bad, "kl_jump_ratio"),
+                _reason_if(kl_abs_bad, "kl_abs"),
+                _reason_if(log_var_bad, "max_log_var"),
+            ],
+            axis=0,
+        )
 
         toxic_step = (
             tf.logical_not(finite_losses)
@@ -229,6 +260,7 @@ class VAE_Trainer:
             max_abs_mu,
             kl_jump_ratio,
             toxic_step,
+            toxic_reasons,
             applied_update,
         )
 
@@ -245,6 +277,7 @@ class VAE_Trainer:
             max_abs_mu,
             kl_jump_ratio,
             toxic_step,
+            toxic_reasons,
             applied_update,
         ) = raw_step_output
 
@@ -263,6 +296,7 @@ class VAE_Trainer:
             max_abs_mu=float(max_abs_mu.numpy()),
             kl_jump_ratio=float(kl_jump_ratio.numpy()),
             toxic_step=bool(toxic_step.numpy()),
+            toxic_reasons=tuple(x.decode("utf-8") for x in toxic_reasons.numpy().tolist()),
             applied_update=bool(applied_update.numpy()),
             mu_finite=bool(tf.reduce_all(tf.math.is_finite(mu)).numpy()),
             log_var_finite=bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy()),
@@ -352,6 +386,14 @@ class VAE_Trainer:
                         max_kl_weight_seen=max_kl_weight_seen,
                         min_kl_weight_seen=min_kl_weight_seen,
                         window_len=update_info["window_len"],
+                        kl_jump_ratio=step_result.kl_jump_ratio,
+                        max_log_var=step_result.max_log_var,
+                        min_log_var=step_result.min_log_var,
+                        max_grad_norm=(
+                            self.cfg.max_grad_norm
+                            if self.cfg.max_grad_norm is not None
+                            else step_result.grad_norm
+                        ),
                     )
 
                     if self.monitor.is_snapshot_step(step):

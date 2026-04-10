@@ -58,6 +58,10 @@ class TrainingMonitor:
         max_kl_weight_seen,
         min_kl_weight_seen,
         window_len,
+        kl_jump_ratio,
+        max_log_var,
+        min_log_var,
+        max_grad_norm,
     ):
         self.writer.write_loss_text_line(
             epoch=epoch,
@@ -71,6 +75,10 @@ class TrainingMonitor:
             max_kl_weight_seen=max_kl_weight_seen,
             min_kl_weight_seen=min_kl_weight_seen,
             window_len=window_len,
+            kl_jump_ratio=kl_jump_ratio,
+            max_log_var=max_log_var,
+            min_log_var=min_log_var,
+            max_grad_norm=max_grad_norm,
         )
 
     def record_losses(self, curr_loss_recon, curr_loss_kl, curr_kl_weight):

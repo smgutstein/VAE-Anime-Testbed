@@ -25,6 +25,10 @@ class TrainerConfig:
     running_window: int | None
 
     # Safety / trip-wire
+    max_grad_norm: float | None
+    step_guard_kl_jump_ratio_threshold: float
+    step_guard_kl_abs_threshold: float
+    step_guard_max_log_var_threshold: float
     tripwire_lr_backoff: float
     tripwire_lr_floor: float
     max_consecutive_tripwires: int
@@ -125,6 +129,20 @@ class TrainerConfig:
             ),
 
             # Safety / trip-wire
+            max_grad_norm=(
+                config.getfloat(safety_section, "max_grad_norm")
+                if config.has_option(safety_section, "max_grad_norm")
+                else None
+            ),
+            step_guard_kl_jump_ratio_threshold=config.getfloat(
+                safety_section, "step_guard_kl_jump_ratio_threshold", fallback=100.0
+            ),
+            step_guard_kl_abs_threshold=config.getfloat(
+                safety_section, "step_guard_kl_abs_threshold", fallback=1e6
+            ),
+            step_guard_max_log_var_threshold=config.getfloat(
+                safety_section, "step_guard_max_log_var_threshold", fallback=20.0
+            ),
             tripwire_lr_backoff=config.getfloat(
                 safety_section, "tripwire_lr_backoff", fallback=0.5
             ),
@@ -218,6 +236,16 @@ class TrainerConfig:
                 raise ValueError("kl_weight_update_factor must be > 0")
             if self.running_window < 2:
                 raise ValueError("running_window must be >= 2")
+            
+        if self.max_grad_norm is not None and self.max_grad_norm <= 0:
+            raise ValueError("max_grad_norm must be > 0 when provided")
+        if self.step_guard_kl_jump_ratio_threshold <= 0:
+            raise ValueError("step_guard_kl_jump_ratio_threshold must be > 0")
+        if self.step_guard_kl_abs_threshold <= 0:
+            raise ValueError("step_guard_kl_abs_threshold must be > 0")
+        if self.step_guard_max_log_var_threshold <= 0:
+            raise ValueError("step_guard_max_log_var_threshold must be > 0")
+
             
         if self.tripwire_lr_backoff <= 0:
             raise ValueError("tripwire_lr_backoff must be > 0")
