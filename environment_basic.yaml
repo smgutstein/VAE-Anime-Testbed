@@ -1,0 +1,17 @@
+name: vae-portfolio-jupyter
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - jupyterlab>=4
+  - numpy>=1.26,<2.0
+  - matplotlib>=3.8
+  - pillow>=10
+  - imageio>=2.34
+  - imageio-ffmpeg>=0.6
+  - pyyaml>=6
+  - tqdm>=4.66
+  - pytest>=8
+  - pip:
+      - tensorflow==2.16.2
