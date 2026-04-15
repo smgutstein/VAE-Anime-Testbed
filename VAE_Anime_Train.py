@@ -315,7 +315,7 @@ class VAE_Trainer:
         self.monitor.open()
         try:
             for epoch in range(self.cfg.epochs):
-                logging.info("Start of epoch %d at %s" % (epoch, ctime()))
+                logging.info("Start of epoch %d of %d at %s" % (epoch, self.cfg.epochs, ctime()))
 
                 if (epoch + 1) % self.cfg.flush_every_epochs == 0:
                     self.monitor.flush()
@@ -483,9 +483,15 @@ class VAE_Trainer:
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
-    parser.add_argument('-c', '--config_file', type=str,
-                        default='config.ini', help='Config file')
+    parser = argparse.ArgumentParser(
+        description="Train the anime VAE from a config file."
+    )
+    parser.add_argument(
+        '-c', '--config_file',
+        type=str,
+        default='config.ini',
+        help='Config file path or config filename inside ./configs'
+    )
     parser.add_argument("--log", default="INFO", help="Logging level")
 
     args = parser.parse_args()

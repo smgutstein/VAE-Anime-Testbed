@@ -10,6 +10,40 @@ from utils import (
 )
 
 
+def resolve_config_path(
+    config_file: str | Path,
+    default_config_dir: str | Path = "configs",
+) -> Path:
+    """
+    Resolve a config path with minimal user friction.
+
+    Resolution order:
+    1. Use the provided path as-is if it exists.
+    2. Try the current working directory's config dir.
+    3. Try the repo/module directory's config dir.
+    4. Raise FileNotFoundError with a helpful message.
+    """
+    raw_path = Path(config_file)
+
+    if raw_path.is_file():
+        return raw_path
+
+    here = Path(__file__).resolve().parent
+    fallback_candidates = [
+        Path(default_config_dir) / raw_path,
+        here / default_config_dir / raw_path,
+    ]
+
+    for candidate in fallback_candidates:
+        if candidate.is_file():
+            return candidate
+
+    tried = [str(raw_path)] + [str(p) for p in fallback_candidates]
+    raise FileNotFoundError(
+        f"Could not find config file '{config_file}'. Tried: {tried}"
+    )
+
+
 @dataclass(frozen=True)
 class TrainerConfig:
     config_file: Path
@@ -68,7 +102,7 @@ class TrainerConfig:
 
     @classmethod
     def from_file(cls, config_file="config.ini"):
-        config_path = Path(config_file)
+        config_path = resolve_config_path(Path(config_file))
         config = load_and_validate_config(config_path)
         safety_section = "Safety_Parameters"
 

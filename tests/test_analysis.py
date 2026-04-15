@@ -47,7 +47,7 @@ class TestAnalyzeResults:
 
         ar.make_singleton_graphs()
 
-        assert (stats_dir / "Paretoish.png").exists()
+        assert (stats_dir / "Pareto_Comparisons.png").exists()
         assert (stats_dir / "Recon_KL_Comp_1.png").exists()
         assert (stats_dir / "Recon_KL_Comp_2.png").exists()
         assert (stats_dir / "mu.png").exists()

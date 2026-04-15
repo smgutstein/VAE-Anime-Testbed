@@ -136,8 +136,8 @@ class AnalyzeResults():
         color_bar.set_label("Pt Number")
 
         # Save graph
-        plt.savefig(self.stats_dir / Path('Paretoish.png'))   
-        logging.info(f"Saved {self.stats_dir / Path('Paretoish.png')}")  
+        plt.savefig(self.stats_dir / Path('Pareto_Comparisons.png'))   
+        logging.info(f"Saved {self.stats_dir / Path('Pareto_Comparisons.png')}")  
 
     def make_singleton_graphs(self):
         self.make_paretoish_graph()
