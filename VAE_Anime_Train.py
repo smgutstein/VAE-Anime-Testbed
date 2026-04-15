@@ -88,6 +88,7 @@ class VAE_Trainer:
             self.output_dir,
             seed=self.cfg.seed,
             data_dir=self.cfg.data_dir,
+            strict_reproducibility=self.cfg.deterministic,
         )
         self.data.set_data_params(
             batch_size=self.cfg.batch_size,

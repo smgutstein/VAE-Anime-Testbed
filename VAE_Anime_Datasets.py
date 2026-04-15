@@ -29,7 +29,8 @@ class Datasets():
 
     
     '''
-    def __init__(self, output_dir="scratch_output", seed=None, data_dir=None):
+    def __init__(self, output_dir="scratch_output", seed=None, data_dir=None,
+                 strict_reproducibility=False):
         '''Initializes the class, creates the output directory, 
         using "scratch_output" as the default,     
         and sets flags indicating things to be done.'''
@@ -38,6 +39,10 @@ class Datasets():
         self.data_downloaded = False
         self.datasets_made = False
         self.seed = seed
+        self.strict_reproducibility = bool(strict_reproducibility)
+        self.num_parallel_calls = 1 if self.strict_reproducibility else tf.data.AUTOTUNE
+        self.prefetch_buffer = 1 if self.strict_reproducibility else tf.data.AUTOTUNE
+        self.reshuffle_each_iteration = not self.strict_reproducibility
 
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -123,11 +128,10 @@ class Datasets():
 
         def get_dataset_slice_paths(image_dir):
             '''returns a list of paths to the image files'''
-            image_file_gen = Path(image_dir).iterdir()
-            image_paths = [fname for fname in image_file_gen 
-                           if fname.suffix in ['.jpg', '.jpeg', '.png']]
-
-            return image_paths
+            return sorted(
+                fname for fname in Path(image_dir).iterdir()
+                if fname.suffix.lower() in ['.jpg', '.jpeg', '.png']
+            )
 
 
         def map_image(image_filename):
@@ -190,30 +194,37 @@ class Datasets():
         train_files = list(map(str, train_paths))
         training_dataset = tf.data.Dataset.from_tensor_slices(train_files)
         training_dataset = training_dataset.map(map_image, 
-                                                num_parallel_calls=tf.data.AUTOTUNE)
+                                                num_parallel_calls=self.num_parallel_calls)
         training_dataset = training_dataset.shuffle(
             self.shuffle_buffer,
             seed=self.seed,
-            reshuffle_each_iteration=True,
+            reshuffle_each_iteration=self.reshuffle_each_iteration,
         ).batch(
             self.batch_size,
             drop_remainder=self.train_drop_remainder,
-        ).prefetch(tf.data.AUTOTUNE)
+        ).prefetch(self.prefetch_buffer)
 
 
         # load the validation image paths into tensors and create batches
         val_files = list(map(str, val_paths))
         validation_dataset = tf.data.Dataset.from_tensor_slices(val_files)
         validation_dataset = validation_dataset.map(map_image, 
-                                                num_parallel_calls=tf.data.AUTOTUNE)
+                                                num_parallel_calls=self.num_parallel_calls)
         validation_dataset = validation_dataset.batch(self.batch_size, 
-                                                      drop_remainder=False).prefetch(tf.data.AUTOTUNE)
+                                                      drop_remainder=False).prefetch(self.prefetch_buffer)
 
 
         # set the training and validation datasets and print the number of batches in each
         self.training_dataset = training_dataset
         self.validation_dataset = validation_dataset
         self.datasets_made = True
+        logging.info(
+            'Dataset mode: strict_reproducibility=%s, num_parallel_calls=%s, prefetch_buffer=%s, reshuffle_each_iteration=%s',
+            self.strict_reproducibility,
+            self.num_parallel_calls,
+            self.prefetch_buffer,
+            self.reshuffle_each_iteration,
+        )
         logging.info(f'number of batches in the training set: {len(training_dataset)}')
         logging.info(f'number of batches in the validation set: {len(validation_dataset)}')
 
