@@ -113,7 +113,7 @@ class VAE_Trainer:
 
         # Trip-wire state
         self.prev_kl_tensor = tf.Variable(1.0, dtype=tf.float32, trainable=False)
-        self.kl_weight_tensor = tf.Variable(
+        self.beta_factor = tf.Variable(
             self.loss_policy.current_value(),
             dtype=tf.float32,
             trainable=False,
@@ -143,7 +143,7 @@ class VAE_Trainer:
     @tf.function(reduce_retracing=True)
     def train_step(
         x_batch_train,
-        kl_weight_tensor,
+        beta_factor,
         prev_kl_tensor,
         vae_obj,
         loss_fn,
@@ -159,7 +159,7 @@ class VAE_Trainer:
             loss_kl = tf.reduce_mean(
                 1.0 + log_var - tf.square(mu) - tf.exp(log_var)
             ) * -0.5
-            loss_tot = loss_recon + kl_weight_tensor * loss_kl
+            loss_tot = loss_recon + beta_factor * loss_kl
 
         grads = tape.gradient(loss_tot, model.trainable_weights)
 
@@ -323,12 +323,12 @@ class VAE_Trainer:
                     logging.info("File Buffers Flushed")
 
                 for step, x_batch_train in enumerate(self.data.training_dataset):
-                    self.kl_weight_tensor.assign(self.loss_policy.current_value())
+                    self.beta_factor.assign(self.loss_policy.current_value())
                     curr_kl_weight_before_update = float(self.loss_policy.current_value())
 
                     raw_step_output = self.train_step(
                         x_batch_train,
-                        self.kl_weight_tensor,
+                        self.beta_factor,
                         self.prev_kl_tensor,
                         self,
                         self.mse_loss,
