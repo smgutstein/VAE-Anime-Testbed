@@ -19,6 +19,9 @@ def _dataset_batches_as_arrays(ds):
 
 
 def test_strict_reproducibility_gives_identical_dataset_order(tmp_path):
+    if not hasattr(tf, "io"):
+        pytest.skip("This test requires a real TensorFlow install with tf.io")
+
     data_dir = tmp_path / "anime_data"
     images_dir = data_dir / "images"
     _write_fake_images(images_dir, count=12)
@@ -69,6 +72,9 @@ def test_strict_reproducibility_gives_identical_dataset_order(tmp_path):
 
 
 def test_strict_reproducibility_flags_are_set(tmp_path):
+    if not hasattr(tf, "io"):
+        pytest.skip("This test requires a real TensorFlow install with tf.io")
+
     data_dir = tmp_path / "anime_data"
     images_dir = data_dir / "images"
     _write_fake_images(images_dir, count=4)
