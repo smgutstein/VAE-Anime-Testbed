@@ -1,4 +1,6 @@
 import argparse
+import json
+import numpy as np
 import re
 import matplotlib.pyplot as plt
 
@@ -209,6 +211,85 @@ def compare_pareto_curves(experiments, output_dir, skip_fraction=0.10):
     plt.close()
     print(f"Saved {outfile}")
 
+def load_curve(path):
+    """
+    Load a two-column text file with optional header:
+        recon_loss kl_loss
+        ...
+    """
+    return np.loadtxt(path, skiprows=1)
+
+
+def closest_points_between_curves(path_a, path_b, use_log_kl=True):
+    curve_a = load_curve(path_a)
+    curve_b = load_curve(path_b)
+
+    a_recon = curve_a[:, 0]
+    a_kl = curve_a[:, 1]
+
+    b_recon = curve_b[:, 0]
+    b_kl = curve_b[:, 1]
+
+    if use_log_kl:
+        if np.any(a_kl <= 0) or np.any(b_kl <= 0):
+            raise ValueError("KL losses must be positive when using log(KL).")
+
+        a_kl_metric = np.log10(a_kl)
+        b_kl_metric = np.log10(b_kl)
+    else:
+        a_kl_metric = a_kl
+        b_kl_metric = b_kl
+
+    # Combine both curves to define a shared scale.
+    all_recon = np.concatenate([a_recon, b_recon])
+    all_kl_metric = np.concatenate([a_kl_metric, b_kl_metric])
+
+    recon_scale = all_recon.max() - all_recon.min()
+    kl_scale = all_kl_metric.max() - all_kl_metric.min()
+
+    if recon_scale == 0:
+        recon_scale = 1.0
+    if kl_scale == 0:
+        kl_scale = 1.0
+
+    a_scaled = np.column_stack([
+        (a_recon - all_recon.min()) / recon_scale,
+        (a_kl_metric - all_kl_metric.min()) / kl_scale,
+    ])
+
+    b_scaled = np.column_stack([
+        (b_recon - all_recon.min()) / recon_scale,
+        (b_kl_metric - all_kl_metric.min()) / kl_scale,
+    ])
+
+    # Pairwise squared distances: shape = (len(curve_a), len(curve_b))
+    diff = a_scaled[:, None, :] - b_scaled[None, :, :]
+    dist2 = np.sum(diff**2, axis=2)
+
+    i, j = np.unravel_index(np.argmin(dist2), dist2.shape)
+
+    return {
+        f"index_{path_a.parent.parent.name}": i,
+        f"index_{path_b.parent.parent.name}": j,
+        f"point_{path_a.parent.parent.name}": curve_a[i],
+        f"point_{path_b.parent.parent.name}": curve_b[j],
+        "scaled_distance": np.sqrt(dist2[i, j]),
+        "raw_recon_difference": abs(curve_a[i, 0] - curve_b[j, 0]),
+        "raw_kl_difference": abs(curve_a[i, 1] - curve_b[j, 1]),
+    }
+
+def to_jsonable(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+def save_closest_points_result(result, outfile):
+    with open(outfile, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, default=to_jsonable)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -272,3 +353,14 @@ if __name__ == "__main__":
 
     compare_graphs(experiments, output_dir, skip_fraction=args.skip_fraction)
     compare_pareto_curves(experiments, output_dir, skip_fraction=args.skip_fraction)
+
+    if len(expt_nums) == 2:        
+        paretoPointFile = make_output_stem(experiments, 'ParetoPoints')
+        outfile = output_dir / Path(paretoPointFile)
+        outfile = outfile.with_suffix('.json')
+
+        path0 = specs[0]['dir'] / Path("stats/ParetoPoints.txt")
+        path1 = specs[1]['dir'] / Path("stats/ParetoPoints.txt")
+        closestPointDict = closest_points_between_curves(path0, path1)
+        save_closest_points_result(closestPointDict, outfile)
+        print(f"Saved {outfile}")
