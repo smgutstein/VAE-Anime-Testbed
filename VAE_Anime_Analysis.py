@@ -110,7 +110,7 @@ class AnalyzeResults():
         series = self.reader.read_loss_series()
         return series.recon_loss, series.kl_loss, series.kl_weight
     
-    def make_paretoish_graph(self):
+    def make_pareto_graph(self):
 
         # Read file with recon and kl losses
         _, recon_pts, kl_pts = self.read_loss_file_points()
@@ -129,7 +129,7 @@ class AnalyzeResults():
         # Give the plot a title and labels
         ax.set_xlabel('Recon Loss')
         ax.set_ylabel('KL Loss')
-        ax.set_title('Pareto-ish Graph')
+        ax.set_title('Pareto Graph')
 
         # add a colorbar
         color_bar = fig.colorbar(sc)
@@ -140,7 +140,7 @@ class AnalyzeResults():
         logging.info(f"Saved {self.stats_dir / Path('Pareto_Comparisons.png')}")  
 
     def make_singleton_graphs(self):
-        self.make_paretoish_graph()
+        self.make_pareto_graph()
         self.latent_plotter.make_final_mu_log_var_graphs()
         self.loss_plotter.compare_recon_kl_losses()  
         self.loss_plotter.compare_recon_kl_losses2()
@@ -160,7 +160,7 @@ class AnalyzeResults():
         return recon_pts, kl_pts
 
 
-    def make_paretoish_movie(self):
+    def make_pareto_movie(self):
 
         # Read file with recon and kl losses
         _, recon_pts, kl_pts = self.read_loss_file_points()
@@ -168,7 +168,7 @@ class AnalyzeResults():
         skip_pts = int(.05 * len(recon_pts))
         recon_pts = recon_pts[skip_pts:]
         kl_pts = kl_pts[skip_pts:]
-        writer = imageio.get_writer(self.movies_dir / "paretoish.mp4", fps=5)
+        writer = imageio.get_writer(self.movies_dir / "pareto.mp4", fps=5)
 
         num_points = len(recon_pts)
         
@@ -191,7 +191,7 @@ class AnalyzeResults():
 
 
         for idx in tqdm(range(num_frames+1),
-                        desc='Making movie for paretoish'):
+                        desc='Making movie for pareto'):
 
             # Find start & stop data points for this frame
             start = idx * frame_delta
@@ -261,8 +261,12 @@ class AnalyzeResults():
         outpath = self.stats_dir / "ParetoCurve.png"
         plt.savefig(outpath)
         logging.info(f" Saved {str(outpath)}")
- 
 
+        outpath2 = self.stats_dir / "ParetoPoints.txt"
+        with outpath2.open("w", encoding="utf-8") as f:
+            f.write("      recon_loss         kl_loss\n")
+            for recon_loss, kl_loss in pareto_curve:
+                f.write(f"{recon_loss:.17g} {kl_loss:.17g}\n")
 
 
 
@@ -283,7 +287,7 @@ if __name__ == "__main__":
     ar = AnalyzeResults(args.config_file, args.expt)
     ar.make_singleton_graphs()  
     ar.movie_builder.make_images_movie()
-    ar.make_paretoish_movie()
+    ar.make_pareto_movie()
     ar.make_pareto_curve_graph()
     if args.stat_graphs:
         ar.movie_builder.make_mu_log_var_movie(log_var_graph=True)

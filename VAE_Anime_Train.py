@@ -516,7 +516,7 @@ if __name__ == "__main__":
         ar.make_singleton_graphs()
         ar.movie_builder.make_images_movie()
         ar.make_pareto_curve_graph()
-        ar.make_paretoish_movie()
+        ar.make_pareto_movie()
         if vae.cfg.make_mu_log_var_movies:
             ar.movie_builder.make_mu_log_var_movie(log_var_graph=True)
             ar.movie_builder.make_mu_log_var_movie(log_var_graph=False)
