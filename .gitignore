@@ -4,3 +4,11 @@ __pycache__/
 .pytest_cache/
 *.keras
 *.mp4
+*.pyc
+*.pkl
+*.npy
+*.npz
+*.h5
+*.gif
+*.avi
+.DS_Store
