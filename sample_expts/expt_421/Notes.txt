@@ -1,0 +1,11 @@
+Git Hash: 
+Current Branch: master
+
+commit 476f51750ff9a0230a9a50722baae6bd7fe6ab36
+Author: Steven Gutstein <x@x>
+Date:   Fri Apr 10 16:46:54 2026 -0400
+
+    Adjusting step-guard, step-guard diagnostics and adding gradient clipping
+Loss Policy: adaptive_kl
+Random Seed: 1234
+Deterministic TF Ops: False

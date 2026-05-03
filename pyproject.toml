@@ -1,0 +1,12 @@
+[project]
+name = "vae-anime"
+version = "0.1.0"
+description = "A TensorFlow VAE test bed for fixed-beta and adaptive greedy-beta training on anime face images."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

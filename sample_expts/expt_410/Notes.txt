@@ -1,0 +1,11 @@
+Git Hash: 
+Current Branch: trip-wire-stop
+
+commit b6b0a21d953e9d0a0d31fcccf71d449d8fe97bd0
+Author: Steven Gutstein <x@x>
+Date:   Sun Apr 5 17:40:41 2026 -0400
+
+    Putting a limit on trip-wire adjustments
+Loss Policy: fixed_beta
+Random Seed: 1234
+Deterministic TF Ops: False

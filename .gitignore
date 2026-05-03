@@ -12,3 +12,52 @@ __pycache__/
 *.gif
 *.avi
 .DS_Store
+# Local archives / downloaded datasets
+*.zip
+animefaces.zip
+
+# Local comparison / scratch dirs
+snapshot_compare/
+temp/
+data/
+expts/
+figures/
+
+# Training checkpoints / model artifacts
+checkpoints/
+*.ckpt*
+*.index
+*.data-*-of-*
+*.keras
+*.h5
+
+# Python / notebook noise
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local editor settings
+.vscode/
+
+# Scratch / temporary project files
+Untitled*.ipynb
+history.txt
+dataset_reproducibility.patch
+
+# Local/legacy experiment configs not part of clean snapshot
+configs/config.ini
+configs/config_akl1.ini
+configs/config_akl2.ini
+configs/config_akl_390.ini
+configs/config_akl_412.ini
+configs/config_beta.ini
+configs/config_beta_2500.ini
+configs/config_beta_5000.ini
+
+# Scratch files with literal # in filename
+\# Anime VAE Test Bed: Constant-β vs Adap.md
+
+# Optional local helper
+ExptSearcher.py
+ExptSummarizer.py

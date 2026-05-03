@@ -1,0 +1,845 @@
+Git Hash: 
+Current Branch: 04_04_2026_cleanup
+
+commit 5bd0e270f210a23ca5aad1eb8535fda9cbd02226
+Author: Steven Gutstein <x@x>
+Date:   Sat Apr 4 20:35:48 2026 -0400
+
+    Adding guards against sigma exploding and giving better mu, sigma initialization
+
+Uncommitted changes:
+diff --git a/Paretoish_Comparison.py b/Paretoish_Comparison.py
+index 4453cc1..d5e1c33 100644
+--- a/Paretoish_Comparison.py
++++ b/Paretoish_Comparison.py
+@@ -1,4 +1,5 @@
+ import argparse
++import re
+ import matplotlib.pyplot as plt
+ 
+ from pathlib import Path
+@@ -11,6 +12,13 @@ from VAE_ParetoFront import ParetoFront
+ from utils import get_experiment_dir
+ 
+ 
++def sanitize_filename_part(text):
++    text = str(text)
++    text = re.sub(r'[<>:"/\\|?*]+', '_', text)
++    text = re.sub(r'\s+', ' ', text).strip()
++    return text[:180]
++
++
+ def get_experiment_label(expt_dir, fallback_label=None):
+     expt_dir = Path(expt_dir)
+     cfg_path = expt_dir / "config.ini"
+@@ -19,12 +27,13 @@ def get_experiment_label(expt_dir, fallback_label=None):
+         cfg = TrainerConfig.from_file(cfg_path)
+         if cfg.expt_name:
+             return f"{expt_dir.name}: {cfg.expt_name}"
+-        
++
+     if fallback_label is not None:
+         return f"{expt_dir.name}: {fallback_label}"
+ 
+     return expt_dir.name
+ 
++
+ def read_pareto_points(expt_dir):
+     stats_dir = Path(expt_dir) / "stats"
+     reader = ArtifactReader(stats_dir)
+@@ -37,6 +46,7 @@ def read_pareto_points(expt_dir):
+         _, recon_pts, kl_pts, _ = read_loss_file_points_io(losses_file)
+         return recon_pts, kl_pts
+ 
++
+ def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):
+     if expt_dir is not None:
+         resolved = Path(expt_dir)
+@@ -51,152 +61,214 @@ def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):
+ 
+ 
+ def resolve_losses_file(expt_dir):
+-    losses_file = Path(expt_dir) / 'stats' / 'losses_file.txt'
++    losses_file = Path(expt_dir) / "stats" / "losses_file.txt"
+     if not losses_file.is_file():
+         raise FileNotFoundError(f"Loss file does not exist: {losses_file}")
+     return losses_file
+ 
+ 
+-def compare_graphs(expt1_label, recon_pts1, kl_pts1, 
+-                   expt2_label, recon_pts2, kl_pts2,
+-                   output_dir):
+-    fig, ax = plt.subplots(2)
++def build_experiment_specs(parent_dir, expt_nums=None, expt_dirs=None):
++    """
++    Build a list of experiment specs:
++        [{"dir": Path(...), "fallback_label": ...}, ...]
++    """
++    expt_nums = expt_nums or []
++    expt_dirs = expt_dirs or []
+ 
+-    # Early points destroy scaling, so skip 1st 10% of the points
+-    skip_pts1 = int(.10*len(recon_pts1))
+-    skip_pts2 = int(.10*len(recon_pts2))
++    if not expt_nums and not expt_dirs:
++        raise ValueError("Provide at least one experiment via --expts / --expt_dirs "
++                         "or via legacy --expt1/--expt2 options.")
+ 
+-    # create a scatter plot on the axes for expt1
+-    sc = ax[0].scatter(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:],
+-                    s=1, c='cadetblue', label=f'Expt {expt1_label}')
++    specs = []
+ 
+-    # create a scatter plot on the axes for expt2
+-    sc = ax[0].scatter(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:],
+-                    s=1, c='indianred', label=f'Expt {expt2_label}')
++    for expt_num in expt_nums:
++        expt_dir = resolve_experiment_dir(parent_dir, expt_num=expt_num)
++        specs.append({
++            "dir": expt_dir,
++            "fallback_label": str(expt_num),
++        })
+ 
+-    # Give the plot a title and labels
+-    ax[0].set_title('Pareto-ish Graph')
+-    ax[0].set_xlabel('Recon Loss')
+-    ax[0].set_ylabel('KL Loss')
+-    ax[0].set_yscale('log')
+-    ax[0].legend()
++    for expt_dir_str in expt_dirs:
++        expt_dir = resolve_experiment_dir(parent_dir, expt_dir=expt_dir_str)
++        specs.append({
++            "dir": expt_dir,
++            "fallback_label": None,
++        })
+ 
+-    # Now repeat in reverse order to avoid overlap confusion
+-    # create a scatter plot on the axes for expt2
+-    ax[1].scatter(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:],
+-                    s=1, c='indianred', label=expt2_label)
+-    
+-    # create a scatter plot on the axes for expt1
+-    ax[1].scatter(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:],
+-                    s=1, c='cadetblue', label=expt1_label)
++    return specs
+ 
+ 
+-    # Give the plot a title and labels
+-    ax[1].set_xlabel('Recon Loss')
+-    ax[1].set_ylabel('KL Loss')
+-    ax[1].set_yscale('log')
+-    ax[1].legend()
++def load_experiments(specs):
++    experiments = []
+ 
+-    plt.savefig(output_dir / Path(f'Paretoish {expt1_label}  {expt2_label}.png'))
+-    plt.close()
+-    print(f"Saved {output_dir / Path(f'Paretoish {expt1_label}  {expt2_label}.png')}")
+-
+-def compare_pareto_curves(expt1_label, recon_pts1, kl_pts1, 
+-                          expt2_label, recon_pts2, kl_pts2,
+-                          output_dir):
+-    p1 = ParetoFront()
+-    p2 = ParetoFront()
+-
+-    # Early points are noisy, so skip 1st 10% of the points
+-    skip_pts1 = int(.10*len(recon_pts1))
+-    skip_pts2 = int(.10*len(recon_pts2))
+-
+-
+-    p1.add_points(recon_pts1[skip_pts1:], kl_pts1[skip_pts1:])
+-    p2.add_points(recon_pts2[skip_pts2:], kl_pts2[skip_pts2:])
+-
+-    pareto_curve1 = p1.get_smooth_pareto_curve()
+-    pareto_curve2 = p2.get_smooth_pareto_curve()
+-
+-    fig, ax = plt.subplots()
+-
+-    ax.plot(pareto_curve1[:, 0], pareto_curve1[:, 1], 
+-            color='dodgerblue', label=expt1_label, linewidth=2)
+-    ax.scatter(pareto_curve1[:, 0], pareto_curve1[:, 1], 
+-                   color='darkslategray', s=10)  # show curve points
+-    
+-    ax.plot(pareto_curve2[:, 0], pareto_curve2[:, 1], 
+-            color='lightcoral', label=expt2_label, linewidth=2)
+-    ax.scatter(pareto_curve2[:, 0], pareto_curve2[:, 1], 
+-                   color='maroon', s=10)  # show curve points
+-    
+-    ax.set_xlabel('Recon Loss')
+-    ax.set_ylabel('KL Loss')
+-    ax.set_yscale('log')
+-    ax.set_title('Pareto Curves')
+-    ax.legend()
++    for spec in specs:
++        expt_dir = spec["dir"]
++        fallback_label = spec["fallback_label"]
++
++        recon_pts, kl_pts = read_pareto_points(expt_dir)
++        label = get_experiment_label(expt_dir, fallback_label=fallback_label)
++
++        experiments.append({
++            "dir": expt_dir,
++            "label": label,
++            "recon_pts": recon_pts,
++            "kl_pts": kl_pts,
++        })
++
++    return experiments
++
++
++def make_output_stem(experiments, prefix, max_labels=6):
++    labels = [sanitize_filename_part(expt["dir"].name) for expt in experiments[:max_labels]]
++    if len(experiments) > max_labels:
++        labels.append(f"plus_{len(experiments) - max_labels}_more")
++    return f"{prefix} {'__'.join(labels)}"
++
++
++def compare_graphs(experiments, output_dir, skip_fraction=0.10):
++    if len(experiments) < 1:
++        raise ValueError("Need at least one experiment to plot")
++
++    fig, ax = plt.subplots(2, figsize=(10, 10), constrained_layout=True)
++
++    for idx, expt in enumerate(experiments):
++        recon_pts = expt["recon_pts"]
++        kl_pts = expt["kl_pts"]
++        label = expt["label"]
++
++        skip_pts = int(skip_fraction * len(recon_pts))
++        x = recon_pts[skip_pts:]
++        y = kl_pts[skip_pts:]
++
++        ax[0].scatter(x, y, s=1, label=label)
+ 
+-    plt.savefig(output_dir / Path(f'ParetoCurves {expt1_label}  {expt2_label}.png'))
++    ax[0].set_title("Pareto-ish Graph")
++    ax[0].set_xlabel("Recon Loss")
++    ax[0].set_ylabel("KL Loss")
++    ax[0].set_yscale("log")
++    ax[0].legend(markerscale=4)
++
++    # Reverse plot order on second axes to reduce overplotting bias
++    for expt in reversed(experiments):
++        recon_pts = expt["recon_pts"]
++        kl_pts = expt["kl_pts"]
++        label = expt["label"]
++
++        skip_pts = int(skip_fraction * len(recon_pts))
++        x = recon_pts[skip_pts:]
++        y = kl_pts[skip_pts:]
++
++        ax[1].scatter(x, y, s=1, label=label)
++
++    ax[1].set_xlabel("Recon Loss")
++    ax[1].set_ylabel("KL Loss")
++    ax[1].set_yscale("log")
++    ax[1].legend(markerscale=4)
++
++    outfile = output_dir / f"{make_output_stem(experiments, 'Paretoish')}.png"
++    plt.savefig(outfile, dpi=200)
+     plt.close()
+-    print(f"Saved {output_dir / Path(f'ParetoCurves {expt1_label}  {expt2_label}.png')}")
++    print(f"Saved {outfile}")
+ 
+ 
+- 
++def compare_pareto_curves(experiments, output_dir, skip_fraction=0.10):
++    if len(experiments) < 1:
++        raise ValueError("Need at least one experiment to plot")
+ 
++    fig, ax = plt.subplots(figsize=(10, 7), constrained_layout=True)
+ 
+-if __name__ == "__main__":
+-    '''Compare the pareto-ish graphs of two experiments.'''
+-    parser = argparse.ArgumentParser(description='Set some params for training & output dir.')
+-    parser.add_argument('--expt1', type=int, help='Number of first experiment')
+-    parser.add_argument('--expt2', type=int, help='Number of second experiment')
+-    parser.add_argument('--expt1_dir', type=str, help='Path to first experiment directory', default = None)
+-    parser.add_argument('--expt2_dir', type=str, help='Path to second experiment directory', default = None)
+-    parser.add_argument('--output_dir', type=str, help='Directory for comparison outputs', default = None)
++    for expt in experiments:
++        recon_pts = expt["recon_pts"]
++        kl_pts = expt["kl_pts"]
++        label = expt["label"]
+ 
+-    parser.add_argument('-c', '--config_file', type=str, nargs='?',
+-                        default='config.ini', help='Config file')
++        skip_pts = int(skip_fraction * len(recon_pts))
+ 
+-    args = parser.parse_args()
++        p = ParetoFront()
++        p.add_points(recon_pts[skip_pts:], kl_pts[skip_pts:])
+ 
+-    # Load the experiment files 
+-    config_file = args.config_file
+-    cfg = TrainerConfig.from_file(config_file)
+-    parent_dir = cfg.parent_dir
++        # Use raw frontier, not smoothing, unless you have a good reason not to.
++        pareto_curve = p.get_curve()
+ 
++        if pareto_curve.size == 0:
++            print(f"Warning: no Pareto points retained for {label}")
++            continue
+ 
+-    e1 = args.expt1
+-    e2 = args.expt2
++        ax.plot(pareto_curve[:, 0], pareto_curve[:, 1],
++                linewidth=2, label=label)
++        ax.scatter(pareto_curve[:, 0], pareto_curve[:, 1], s=10)
+ 
+-    if args.expt1_dir:
+-        e1_dir_arg = args.expt1_dir
+-    else:
+-        e1_dir_arg = parent_dir / Path(f'expt_{e1}')
++    ax.set_xlabel("Recon Loss")
++    ax.set_ylabel("KL Loss")
++    ax.set_yscale("log")
++    ax.set_title("Pareto Curves")
++    ax.legend()
+ 
+-    if args.expt2_dir:
+-        e2_dir_arg = args.expt2_dir
+-    else:
+-        e2_dir_arg = parent_dir / Path(f'expt_{e2}')
+-        
++    outfile = output_dir / f"{make_output_stem(experiments, 'ParetoCurves')}.png"
++    plt.savefig(outfile, dpi=200)
++    plt.close()
++    print(f"Saved {outfile}")
++
++
++if __name__ == "__main__":
++    parser = argparse.ArgumentParser(
++        description="Compare Pareto-ish scatter plots and Pareto curves for any number of experiments."
++    )
++
++    # New multi-experiment interface
++    parser.add_argument(
++        "--expts",
++        type=int,
++        nargs="*",
++        default=None,
++        help="Experiment numbers, e.g. --expts 101 102 103",
++    )
++    parser.add_argument(
++        "--expt_dirs",
++        type=str,
++        nargs="*",
++        default=None,
++        help="Experiment directories, e.g. --expt_dirs expts/expt_101 /tmp/expt_foo",
++    )
++
++    # Legacy two-experiment interface kept for compatibility
++    parser.add_argument("--expt1", type=int, help="Number of first experiment")
++    parser.add_argument("--expt2", type=int, help="Number of second experiment")
++    parser.add_argument("--expt1_dir", type=str, default=None,
++                        help="Path to first experiment directory")
++    parser.add_argument("--expt2_dir", type=str, default=None,
++                        help="Path to second experiment directory")
++
++    parser.add_argument("--output_dir", type=str, default=None,
++                        help="Directory for comparison outputs")
++    parser.add_argument("--skip_fraction", type=float, default=0.10,
++                        help="Fraction of earliest points to skip")
++    parser.add_argument("-c", "--config_file", type=str, nargs="?",
++                        default="config.ini", help="Config file")
+ 
+-    # Check if the experiment directories exist
+-    expt1_dir = resolve_experiment_dir(parent_dir, expt_num=e1, expt_dir=e1_dir_arg)
+-    expt2_dir = resolve_experiment_dir(parent_dir, expt_num=e2, expt_dir=e2_dir_arg)
++    args = parser.parse_args()
+ 
+-    recon_pts1, kl_pts1 = read_pareto_points(expt1_dir)
+-    recon_pts2, kl_pts2 = read_pareto_points(expt2_dir)
++    cfg = TrainerConfig.from_file(args.config_file)
++    parent_dir = Path(cfg.parent_dir)
+ 
+-    output_dir = Path(args.output_dir) if args.output_dir \
+-                                       else Path(parent_dir) / Path('pareto_comps')
++    expt_nums = list(args.expts) if args.expts else []
++    expt_dirs = list(args.expt_dirs) if args.expt_dirs else []
+ 
+-    output_dir.mkdir(parents=True, exist_ok=True)
++    # Fold legacy args into the new lists
++    if args.expt1 is not None:
++        expt_nums.append(args.expt1)
++    if args.expt2 is not None:
++        expt_nums.append(args.expt2)
++    if args.expt1_dir is not None:
++        expt_dirs.append(args.expt1_dir)
++    if args.expt2_dir is not None:
++        expt_dirs.append(args.expt2_dir)
+ 
+-    expt1_label = get_experiment_label(expt1_dir, fallback_label=e1)
+-    expt2_label = get_experiment_label(expt2_dir, fallback_label=e2)
++    specs = build_experiment_specs(parent_dir, expt_nums=expt_nums, expt_dirs=expt_dirs)
++    experiments = load_experiments(specs)
+ 
+-    compare_graphs(expt1_label, recon_pts1, kl_pts1, 
+-                   expt2_label, recon_pts2, kl_pts2,
+-                   output_dir)
++    output_dir = Path(args.output_dir) if args.output_dir else parent_dir / "pareto_comps"
++    output_dir.mkdir(parents=True, exist_ok=True)
+ 
+-    compare_pareto_curves(expt1_label, recon_pts1, kl_pts1, 
+-                          expt2_label, recon_pts2, kl_pts2,
+-                          output_dir)
++    compare_graphs(experiments, output_dir, skip_fraction=args.skip_fraction)
++    compare_pareto_curves(experiments, output_dir, skip_fraction=args.skip_fraction)
+\ No newline at end of file
+diff --git a/VAE_Anime_Train.py b/VAE_Anime_Train.py
+index 481f706..49ade83 100644
+--- a/VAE_Anime_Train.py
++++ b/VAE_Anime_Train.py
+@@ -1,13 +1,13 @@
+ import argparse
+ import logging
+ import numpy as np
++import random
+ 
+ import os
+ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"   # hide INFO, WARNING, and most ERROR logs
+ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # removes the oneDNN startup note
+ import tensorflow as tf
+ 
+-from collections import deque
+ from datetime import timedelta
+ from pathlib import Path
+ from time import time, ctime
+@@ -18,18 +18,39 @@ from VAE_Anime_Datasets import Datasets
+ from VAE_Anime_ExperimentRun import ExperimentRun
+ from VAE_Anime_Full_Model import VAE_Model
+ from VAE_Anime_LossPolicy import build_loss_policy
+-from VAE_Anime_RunArtifacts import (latent_diagnostics,
+-                                    save_failure_history,
+-                                    save_failure_tensors,
+-                                    write_run_summary)
++from VAE_Anime_RunArtifacts import write_run_summary
+ from VAE_Anime_Snapshotter import VAESnapshotter
++from VAE_Anime_StepGuard import (
++    StepGuard,
++    StepResult,
++    TrainingDivergedError,
++)
+ from VAE_Anime_Training_Monitor import TrainingMonitor
+ 
+-from utils import set_all_seeds
+ from utils import setup_logging
+ 
+-class TrainingDivergedError(RuntimeError):
+-    pass
++
++def _set_all_seeds(seed: int, deterministic: bool = False):
++    """Set Python, NumPy, and TensorFlow seeds.
++
++    Args:
++        seed: Integer seed value.
++        deterministic: If True, request more deterministic TF behavior.
++            This can reduce performance and is not guaranteed to make
++            every GPU op bitwise identical.
++    """
++    os.environ["PYTHONHASHSEED"] = str(seed)
++
++    random.seed(seed)
++    np.random.seed(seed)
++    tf.keras.utils.set_random_seed(seed)
++
++    if deterministic:
++        try:
++            tf.config.experimental.enable_op_determinism()
++        except Exception as e:
++            logging.warning(f"Could not enable TF op determinism: {e}")
++
+ 
+ class VAE_Trainer:
+     """Class to train the VAE model on the anime faces dataset."""
+@@ -41,7 +62,7 @@ class VAE_Trainer:
+         self.cfg = TrainerConfig.from_file(config_file)
+ 
+         # Make run randomness explicit and repeatable
+-        set_all_seeds(self.cfg.seed, deterministic=self.cfg.deterministic)
++        _set_all_seeds(self.cfg.seed, deterministic=self.cfg.deterministic)
+         logging.info(
+             f"Using random seed {self.cfg.seed} "
+             f"(deterministic={self.cfg.deterministic})"
+@@ -108,6 +129,15 @@ class VAE_Trainer:
+             snapshot_every=self.cfg.snapshot_every,
+         )
+ 
++        self.step_guard = StepGuard(
++            stats_dir=self.stats_dir,
++            loss_policy=self.loss_policy,
++            optimizer=self.optimizer,
++            recent_good_maxlen=8,
++            lr_backoff=0.5,
++            lr_floor=1e-6,
++        )
++
+     @staticmethod
+     @tf.function(reduce_retracing=True)
+     def train_step(
+@@ -199,6 +229,42 @@ class VAE_Trainer:
+             applied_update,
+         )
+ 
++    @staticmethod
++    def _build_step_result(raw_step_output, x_batch_train, epoch, step, kl_weight):
++        (
++            loss_recon,
++            loss_kl,
++            mu,
++            log_var,
++            grad_norm,
++            max_log_var,
++            min_log_var,
++            max_abs_mu,
++            kl_jump_ratio,
++            toxic_step,
++            applied_update,
++        ) = raw_step_output
++
++        return StepResult(
++            epoch=int(epoch),
++            step=int(step),
++            kl_weight=float(kl_weight),
++            x_batch_train=x_batch_train,
++            mu=mu,
++            log_var=log_var,
++            loss_recon=float(loss_recon.numpy()),
++            loss_kl=float(loss_kl.numpy()),
++            grad_norm=float(grad_norm.numpy()),
++            max_log_var=float(max_log_var.numpy()),
++            min_log_var=float(min_log_var.numpy()),
++            max_abs_mu=float(max_abs_mu.numpy()),
++            kl_jump_ratio=float(kl_jump_ratio.numpy()),
++            toxic_step=bool(toxic_step.numpy()),
++            applied_update=bool(applied_update.numpy()),
++            mu_finite=bool(tf.reduce_all(tf.math.is_finite(mu)).numpy()),
++            log_var_finite=bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy()),
++        )
++
+     def train_loop(self):
+         start_time = time()
+         logging.info("Start Time: %s" % ctime())
+@@ -206,7 +272,6 @@ class VAE_Trainer:
+         last_recon = None
+         last_kl = None
+         last_kl_weight = self.loss_policy.current_value()
+-        recent_good_steps = deque(maxlen=8)
+ 
+         weight_update_events = [(0, 0, self.loss_policy.current_update_factor())]
+ 
+@@ -221,213 +286,42 @@ class VAE_Trainer:
+ 
+                 for step, x_batch_train in enumerate(self.data.training_dataset):
+                     self.kl_weight_tensor.assign(self.loss_policy.current_value())
+-
+-                    (loss_recon, loss_kl, mu, log_var, grad_norm, max_log_var,
+-                     min_log_var, max_abs_mu, kl_jump_ratio, toxic_step,
+-                     applied_update,) = \
+-                    self.train_step(x_batch_train, self.kl_weight_tensor,
+-                                    self.prev_kl_tensor, self, self.mse_loss,
+-                                    self.optimizer,)
+-
+-                    curr_loss_recon = float(loss_recon.numpy())
+-                    curr_loss_kl = float(loss_kl.numpy())
+-                    grad_norm_val = float(grad_norm.numpy())
+-                    max_log_var_val = float(max_log_var.numpy())
+-                    min_log_var_val = float(min_log_var.numpy())
+-                    max_abs_mu_val = float(max_abs_mu.numpy())
+-                    kl_jump_ratio_val = float(kl_jump_ratio.numpy())
+-                    toxic_step_val = bool(toxic_step.numpy())
+-                    applied_update_val = bool(applied_update.numpy())
+-
+-                    mu_finite = bool(tf.reduce_all(tf.math.is_finite(mu)).numpy())
+-                    log_var_finite = bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy())
+-
+-                    loss_bad = (
+-                        np.isnan(curr_loss_recon)
+-                        or np.isnan(curr_loss_kl)
+-                        or np.isinf(curr_loss_recon)
+-                        or np.isinf(curr_loss_kl)
++                    curr_kl_weight_before_update = float(self.loss_policy.current_value())
++
++                    raw_step_output = self.train_step(
++                        x_batch_train,
++                        self.kl_weight_tensor,
++                        self.prev_kl_tensor,
++                        self,
++                        self.mse_loss,
++                        self.optimizer,
+                     )
+-                    latent_bad = (not mu_finite) or (not log_var_finite)
+-
+-                    suspicious = (
+-                        (not loss_bad)
+-                        and (not latent_bad)
+-                        and (
+-                            curr_loss_kl > 1e6
+-                            or np.max(np.abs(mu.numpy())) > 1e4
+-                            or np.max(np.abs(log_var.numpy())) > 50
+-                        )
+-                    )
+-
+-                    if (not loss_bad) and (not latent_bad):
+-                        recent_good_steps.append(
+-                            {
+-                                "epoch": int(epoch),
+-                                "step": int(step),
+-                                "x_batch_train": tf.identity(x_batch_train),
+-                                "mu": tf.identity(mu),
+-                                "log_var": tf.identity(log_var),
+-                                "curr_loss_recon": float(curr_loss_recon),
+-                                "curr_loss_kl": float(curr_loss_kl),
+-                                "kl_weight": float(self.loss_policy.current_value()),
+-                            }
+-                        )
+ 
+-                    if suspicious:
+-                        diagnostics = latent_diagnostics(mu, log_var)
+-                        diagnostics["note"] = "Suspicious finite step saved before divergence"
+-                        diagnostics["saved_epoch"] = int(epoch)
+-                        diagnostics["saved_step"] = int(step)
+-                        diagnostics["saved_kl_weight"] = float(
+-                            self.loss_policy.current_value()
+-                        )
+-
+-                        save_failure_tensors(
+-                            stats_dir=self.stats_dir,
+-                            loss_policy=self.loss_policy,
+-                            epoch=epoch,
+-                            step=step,
+-                            x_batch_train=x_batch_train,
+-                            mu=mu,
+-                            log_var=log_var,
+-                            curr_loss_recon=curr_loss_recon,
+-                            curr_loss_kl=curr_loss_kl,
+-                            diagnostics=diagnostics,
+-                            file_tag="suspicious",
+-                        )
+-
+-                    if loss_bad or latent_bad:
+-                        diagnostics = latent_diagnostics(mu, log_var)
+-
+-                        logging.error(
+-                            "Training diverged at epoch=%d step=%d recon=%s kl=%s "
+-                            "kl_weight=%s diagnostics=%s",
+-                            epoch,
+-                            step,
+-                            curr_loss_recon,
+-                            curr_loss_kl,
+-                            self.loss_policy.current_value(),
+-                            diagnostics,
+-                        )
+-
+-                        if recent_good_steps:
+-                            last_good = recent_good_steps[-1]
+-                            diagnostics["note"] = (
+-                                "Crash detected; saved last known finite step "
+-                                "instead of crashing step"
+-                            )
+-                            diagnostics["crash_epoch"] = int(epoch)
+-                            diagnostics["crash_step"] = int(step)
+-                            diagnostics["crash_recon"] = float(curr_loss_recon)
+-                            diagnostics["crash_kl"] = float(curr_loss_kl)
+-                            diagnostics["crash_kl_weight"] = float(
+-                                self.loss_policy.current_value()
+-                            )
+-                            diagnostics["saved_epoch"] = int(last_good["epoch"])
+-                            diagnostics["saved_step"] = int(last_good["step"])
+-                            diagnostics["saved_kl_weight"] = float(last_good["kl_weight"])
+-
+-                            save_failure_tensors(
+-                                stats_dir=self.stats_dir,
+-                                loss_policy=self.loss_policy,
+-                                epoch=last_good["epoch"],
+-                                step=last_good["step"],
+-                                x_batch_train=last_good["x_batch_train"],
+-                                mu=last_good["mu"],
+-                                log_var=last_good["log_var"],
+-                                curr_loss_recon=last_good["curr_loss_recon"],
+-                                curr_loss_kl=last_good["curr_loss_kl"],
+-                                diagnostics=diagnostics,
+-                                file_tag="last_good_before_crash",
+-                            )
+-
+-                            save_failure_history(
+-                                stats_dir=self.stats_dir,
+-                                recent_good_steps=recent_good_steps,
+-                            )
+-                        else:
+-                            diagnostics["note"] = (
+-                                "No earlier finite step available; saved crashing step"
+-                            )
+-                            save_failure_tensors(
+-                                stats_dir=self.stats_dir,
+-                                loss_policy=self.loss_policy,
+-                                epoch=epoch,
+-                                step=step,
+-                                x_batch_train=x_batch_train,
+-                                mu=mu,
+-                                log_var=log_var,
+-                                curr_loss_recon=curr_loss_recon,
+-                                curr_loss_kl=curr_loss_kl,
+-                                diagnostics=diagnostics,
+-                                file_tag="crash_step",
+-                            )
+-
+-                        raise TrainingDivergedError(
+-                            f"Training diverged at epoch={epoch}, step={step}, "
+-                            f"recon={curr_loss_recon}, kl={curr_loss_kl}, "
+-                            f"kl_weight={self.loss_policy.current_value()}"
+-                        )
+-
+-                    if toxic_step_val:
+-                        old_lr = float(self.optimizer.learning_rate.numpy())
+-                        new_lr = max(old_lr * 0.5, 1e-6)
+-                        self.optimizer.learning_rate.assign(new_lr)
++                    step_result = self._build_step_result(
++                        raw_step_output=raw_step_output,
++                        x_batch_train=x_batch_train,
++                        epoch=epoch,
++                        step=step,
++                        kl_weight=curr_kl_weight_before_update,
++                    )
+ 
+-                        diagnostics = latent_diagnostics(mu, log_var)
+-                        diagnostics["note"] = (
+-                            "Trip-wire fired; update skipped; accepted training state unchanged"
+-                        )
+-                        diagnostics["kl_jump_ratio"] = kl_jump_ratio_val
+-                        diagnostics["grad_norm"] = grad_norm_val
+-                        diagnostics["max_log_var"] = max_log_var_val
+-                        diagnostics["min_log_var"] = min_log_var_val
+-                        diagnostics["max_abs_mu"] = max_abs_mu_val
+-                        diagnostics["old_lr"] = old_lr
+-                        diagnostics["new_lr"] = new_lr
+-
+-                        logging.error(
+-                            "Trip-wire fired at epoch=%d step=%d; skipped update; "
+-                            "recon=%g kl=%g kl_jump_ratio=%g max_log_var=%g "
+-                            "min_log_var=%g max_abs_mu=%g grad_norm=%g "
+-                            "kl_weight=%g lr %g -> %g",
+-                            epoch,
+-                            step,
+-                            curr_loss_recon,
+-                            curr_loss_kl,
+-                            kl_jump_ratio_val,
+-                            max_log_var_val,
+-                            min_log_var_val,
+-                            max_abs_mu_val,
+-                            grad_norm_val,
+-                            self.loss_policy.current_value(),
+-                            old_lr,
+-                            new_lr,
+-                        )
++                    decision = self.step_guard.handle_step(step_result)
+ 
+-                        save_failure_tensors(
+-                            stats_dir=self.stats_dir,
+-                            loss_policy=self.loss_policy,
+-                            epoch=epoch,
+-                            step=step,
+-                            x_batch_train=x_batch_train,
+-                            mu=mu,
+-                            log_var=log_var,
+-                            curr_loss_recon=curr_loss_recon,
+-                            curr_loss_kl=curr_loss_kl,
+-                            diagnostics=diagnostics,
+-                            file_tag="tripwire_skip",
+-                        )
++                    if decision.should_raise:
++                        raise decision.exception
+ 
++                    if decision.should_continue:
+                         continue
+ 
+-                    if applied_update_val and np.isfinite(curr_loss_kl) and curr_loss_kl > 0.0:
+-                        self.prev_kl_tensor.assign(curr_loss_kl)
++                    if decision.should_update_prev_kl:
++                        self.prev_kl_tensor.assign(decision.prev_kl_value)
++
++                    curr_loss_recon = step_result.loss_recon
++                    curr_loss_kl = step_result.loss_kl
+ 
+                     last_recon = curr_loss_recon
+                     last_kl = curr_loss_kl
+-                    last_kl_weight = self.loss_policy.current_value()
++                    last_kl_weight = curr_kl_weight_before_update
+ 
+                     update_info = self.loss_policy.update(curr_loss_recon, curr_loss_kl)
+                     weight_direction = update_info["weight_direction"]
+@@ -475,10 +369,10 @@ class VAE_Trainer:
+                     )
+ 
+                     self.monitor.record_latent_stats(
+-                        mu_mean=tf.reduce_mean(mu, 0),
+-                        log_var_mean=tf.reduce_mean(log_var, 0),
+-                        mu_var=tf.math.reduce_variance(mu, 0),
+-                        log_var_var=tf.math.reduce_variance(log_var, 0),
++                        mu_mean=tf.reduce_mean(step_result.mu, 0),
++                        log_var_mean=tf.reduce_mean(step_result.log_var, 0),
++                        mu_var=tf.math.reduce_variance(step_result.mu, 0),
++                        log_var_var=tf.math.reduce_variance(step_result.log_var, 0),
+                     )
+ 
+                     self.monitor.maybe_flush_step(step)
+@@ -538,6 +432,7 @@ class VAE_Trainer:
+ 
+     #############################################################
+ 
++
+ #############################################################
+ 
+ 
+@@ -560,7 +455,7 @@ if __name__ == "__main__":
+             validation_dataset=vae.data.validation_dataset,
+             vae_net=vae.vae.vae_net,
+             decoder_net=vae.vae.decoder.decoder_net,
+-        )    
++        )
+     vae.train_loop()
+ 
+     if vae.cfg.run_analysis:
+@@ -572,4 +467,4 @@ if __name__ == "__main__":
+         ar.make_paretoish_movie()
+         if vae.cfg.make_mu_log_var_movies:
+             ar.movie_builder.make_mu_log_var_movie(log_var_graph=True)
+-            ar.movie_builder.make_mu_log_var_movie(log_var_graph=False)
++            ar.movie_builder.make_mu_log_var_movie(log_var_graph=False)
+\ No newline at end of file
+diff --git a/utils.py b/utils.py
+index f6764a5..65cea88 100644
+--- a/utils.py
++++ b/utils.py
+@@ -12,27 +12,6 @@ import time
+ 
+ from pathlib import Path
+ 
+-def set_all_seeds(seed: int, deterministic: bool = False):
+-    """Set Python, NumPy, and TensorFlow seeds.
+-
+-    Args:
+-        seed: Integer seed value.
+-        deterministic: If True, request more deterministic TF behavior.
+-            This can reduce performance and is not guaranteed to make
+-            every GPU op bitwise identical.
+-    """
+-    os.environ["PYTHONHASHSEED"] = str(seed)
+-
+-    random.seed(seed)
+-    np.random.seed(seed)
+-    tf.keras.utils.set_random_seed(seed)
+-
+-    if deterministic:
+-        try:
+-            tf.config.experimental.enable_op_determinism()
+-        except Exception as e:
+-            logging.warning(f"Could not enable TF op determinism: {e}")
+-
+     
+ def get_git_hash():
+     '''Returns git info if available; otherwise returns a safe fallback string.'''
+Loss Policy: adaptive_kl
+Random Seed: 1234
+Deterministic TF Ops: False

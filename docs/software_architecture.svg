@@ -1,0 +1,108 @@
+<svg width="100%" viewBox="0 0 680 700" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>
+    text { font-family: ui-sans-serif, system-ui, sans-serif; }
+    .t1 { font-size: 12px; font-weight: 500; fill: #3d3d3a; }
+    .t2 { font-size: 10px; fill: #73726c; }
+    .sec { font-size: 11px; font-weight: 500; }
+  </style>
+</defs>
+
+<!-- Entry point -->
+<rect x="248" y="20" width="184" height="42" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="340" y="36" text-anchor="middle" class="t1" dominant-baseline="central">VAE_Anime_Train.py</text>
+<text x="340" y="52" text-anchor="middle" class="t2" dominant-baseline="central">entry point - training loop</text>
+<path d="M295 62 L195 88" fill="none" stroke="#888780" stroke-width="1" marker-end="url(#arrow)"/>
+<path d="M386 62 L460 88" fill="none" stroke="#888780" stroke-width="1" marker-end="url(#arrow)"/>
+<path d="M432 62 L581 88 L581 181" fill="none" stroke="#888780" stroke-width="1" marker-end="url(#arrow)"/>
+
+<!-- Config + utils -->
+<rect x="20" y="90" width="270" height="42" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="155" y="106" text-anchor="middle" class="t1" dominant-baseline="central" fill="#3C3489">VAE_Anime_Config + utils</text>
+<text x="155" y="122" text-anchor="middle" class="t2" dominant-baseline="central">TrainerConfig - validation - seeds - dir helpers</text>
+
+<!-- ExperimentRun -->
+<rect x="306" y="90" width="354" height="42" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="483" y="106" text-anchor="middle" class="t1" dominant-baseline="central" fill="#3C3489">VAE_Anime_ExperimentRun + VAE_Anime_RunArtifacts</text>
+<text x="483" y="122" text-anchor="middle" class="t2" dominant-baseline="central">numbered expt dirs - Notes.txt - run_summary.json - divergence diagnostics</text>
+<line x1="155" y1="132" x2="155" y2="153" stroke="#534AB7" stroke-width="1" fill="none" marker-end="url(#arrow)"/>
+<line x1="340" y1="132" x2="340" y2="153" stroke="#534AB7" stroke-width="1" fill="none" marker-end="url(#arrow)"/>
+
+<!-- Training container -->
+<rect x="20" y="155" width="470" height="190" rx="10" fill="#F1EFE8" fill-opacity="0.5" stroke="#888780" stroke-width="0.5"/>
+<text x="42" y="173" class="sec" dominant-baseline="central" fill="#444441">Training</text>
+<rect x="28" y="183" width="212" height="42" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="134" y="199" text-anchor="middle" class="t1" dominant-baseline="central" fill="#712B13">VAE_Anime_Full_Model</text>
+<text x="134" y="215" text-anchor="middle" class="t2" dominant-baseline="central">Encoder - Decoder - vae_net</text>
+<rect x="252" y="183" width="228" height="42" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="366" y="199" text-anchor="middle" class="t1" dominant-baseline="central" fill="#3C3489">VAE_Anime_LossPolicy</text>
+<text x="366" y="215" text-anchor="middle" class="t2" dominant-baseline="central">FixedBetaLossPolicy - AdaptiveKLLossPolicy</text>
+<rect x="252" y="237" width="228" height="42" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="366" y="253" text-anchor="middle" class="t1" dominant-baseline="central" fill="#3C3489">VAE_Anime_KL_Weight_Scheduler</text>
+<text x="366" y="269" text-anchor="middle" class="t2" dominant-baseline="central">adaptive KL weight heuristic</text>
+<line x1="366" y1="225" x2="366" y2="235" stroke="#534AB7" stroke-width="1" fill="none" marker-end="url(#arrow)"/>
+<rect x="28" y="291" width="452" height="42" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="254" y="307" text-anchor="middle" class="t1" dominant-baseline="central" fill="#085041">TrainingMonitor + VAESnapshotter</text>
+<text x="254" y="323" text-anchor="middle" class="t2" dominant-baseline="central">metric buffers - flush scheduling - snapshot PNG frames</text>
+
+<!-- Datasets -->
+<rect x="502" y="183" width="158" height="42" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="581" y="199" text-anchor="middle" class="t1" dominant-baseline="central" fill="#444441">VAE_Anime_Datasets</text>
+<text x="581" y="215" text-anchor="middle" class="t2" dominant-baseline="central">download - preprocess - tf.data</text>
+<line x1="502" y1="204" x2="492" y2="204" stroke="#888780" stroke-width="1" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow)"/>
+
+<!-- Training → Artifacts -->
+<line x1="254" y1="345" x2="254" y2="363" stroke="#0F6E56" stroke-width="1" fill="none" marker-end="url(#arrow)"/>
+
+<!-- Artifact layer -->
+<rect x="20" y="365" width="640" height="80" rx="10" fill="#E1F5EE" fill-opacity="0.4" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="42" y="382" class="sec" dominant-baseline="central" fill="#085041">Artifacts</text>
+<rect x="28" y="392" width="168" height="42" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="112" y="408" text-anchor="middle" class="t1" dominant-baseline="central" fill="#085041">ArtifactWriter</text>
+<text x="112" y="424" text-anchor="middle" class="t2" dominant-baseline="central">loss - latent - text logs</text>
+<rect x="208" y="392" width="168" height="42" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="292" y="408" text-anchor="middle" class="t1" dominant-baseline="central" fill="#085041">ArtifactReader</text>
+<text x="292" y="424" text-anchor="middle" class="t2" dominant-baseline="central">structured series reads</text>
+<rect x="388" y="392" width="118" height="42" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="447" y="408" text-anchor="middle" class="t1" dominant-baseline="central" fill="#085041">Artifacts</text>
+<text x="447" y="424" text-anchor="middle" class="t2" dominant-baseline="central">schemas - filenames</text>
+<rect x="518" y="392" width="134" height="42" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="585" y="408" text-anchor="middle" class="t1" dominant-baseline="central" fill="#085041">VAE_Anime_ResultsIO</text>
+<text x="585" y="424" text-anchor="middle" class="t2" dominant-baseline="central">legacy fallback reader</text>
+
+<!-- Artifacts → Analysis -->
+<line x1="340" y1="445" x2="340" y2="463" stroke="#0F6E56" stroke-width="1" fill="none" marker-end="url(#arrow)"/>
+
+<!-- Analysis container -->
+<rect x="20" y="465" width="640" height="118" rx="10" fill="#FAECE7" fill-opacity="0.4" stroke="#993C1D" stroke-width="0.5"/>
+<text x="42" y="483" class="sec" dominant-baseline="central" fill="#712B13">Analysis</text>
+<rect x="28" y="492" width="158" height="42" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="107" y="508" text-anchor="middle" class="t1" dominant-baseline="central" fill="#712B13">AnalyzeResults</text>
+<text x="107" y="524" text-anchor="middle" class="t2" dominant-baseline="central">orchestrates analysis</text>
+<rect x="198" y="492" width="98" height="42" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="247" y="508" text-anchor="middle" class="t1" dominant-baseline="central" fill="#712B13">LossPlotter</text>
+<text x="247" y="524" text-anchor="middle" class="t2" dominant-baseline="central">loss curves</text>
+<rect x="308" y="492" width="120" height="42" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="368" y="508" text-anchor="middle" class="t1" dominant-baseline="central" fill="#712B13">LatentStatsPlotter</text>
+<text x="368" y="524" text-anchor="middle" class="t2" dominant-baseline="central">mu / log var graphs</text>
+<rect x="440" y="492" width="118" height="42" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="499" y="508" text-anchor="middle" class="t1" dominant-baseline="central" fill="#712B13">MovieBuilder</text>
+<text x="499" y="524" text-anchor="middle" class="t2" dominant-baseline="central">snapshot timelapse</text>
+<rect x="570" y="492" width="82" height="42" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="611" y="508" text-anchor="middle" class="t1" dominant-baseline="central" fill="#712B13">ParetoFront</text>
+<text x="611" y="524" text-anchor="middle" class="t2" dominant-baseline="central">frontier calc</text>
+
+<!-- CLI tools -->
+<rect x="20" y="606" width="300" height="42" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="170" y="622" text-anchor="middle" class="t1" dominant-baseline="central" fill="#444441">VAE_Anime_Analysis.py (CLI)</text>
+<text x="170" y="638" text-anchor="middle" class="t2" dominant-baseline="central">standalone post-run analysis</text>
+<rect x="340" y="606" width="320" height="42" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="500" y="622" text-anchor="middle" class="t1" dominant-baseline="central" fill="#444441">Paretoish_Comparison.py (CLI)</text>
+<text x="500" y="638" text-anchor="middle" class="t2" dominant-baseline="central">cross-experiment Pareto comparison</text>
+<line x1="170" y1="583" x2="170" y2="604" stroke="#993C1D" stroke-width="1" fill="none" marker-end="url(#arrow)"/>
+<line x1="500" y1="583" x2="500" y2="604" stroke="#993C1D" stroke-width="1" fill="none" marker-end="url(#arrow)"/>
+
+</svg>
