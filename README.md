@@ -296,3 +296,7 @@ In other words, the project is currently stronger as a controlled experimental t
 ## License
 
 This project is released under the MIT License. See [LICENSE.md](LICENSE.md).
+
+## Anime Faces Dataset
+
+The training data is downloaded from the DeepLearning.AI/Coursera-hosted `anime-faces.zip` mirror. The associated Coursera VAE assignment identifies it as the anime faces dataset by MckInsey666. The precise provenance and redistribution license of this hosted ZIP should be treated cautiously, so this repository does not redistribute the image dataset.
