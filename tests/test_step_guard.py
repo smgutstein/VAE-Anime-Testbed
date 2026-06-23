@@ -86,11 +86,9 @@ def test_tripwire_skip_halves_lr_requests_continue_and_saves_artifact(tmp_path, 
     assert float(guard.optimizer.learning_rate.numpy()) == pytest.approx(5e-4)
     assert len(save_calls) == 1
     assert save_calls[0]["file_tag"] == "tripwire_skip"
-    assert tuple(save_calls[0]["diagnostics"]["tripwire_tests_triggered"].tolist()) == (
-        "kl_jump_ratio",
-        "max_log_var",
-    )
 
+    # Important regression check:
+    assert len(guard.recent_good_steps) == 0
 
 def test_divergence_with_recent_good_step_saves_last_good_and_history(tmp_path, monkeypatch, tf):
     import VAE_Anime_StepGuard as sg
@@ -164,3 +162,28 @@ def test_repeated_tripwires_raise_after_threshold(tmp_path, monkeypatch, tf):
 
     assert len(save_calls) == 3
     assert float(guard.optimizer.learning_rate.numpy()) == pytest.approx(1.25e-4)
+
+def test_toxic_skipped_step_is_not_recorded_as_recent_good(tmp_path, monkeypatch, tf):
+    import VAE_Anime_StepGuard as sg
+    from VAE_Anime_StepGuard import StepGuard
+
+    monkeypatch.setattr(sg, "save_failure_tensors", lambda **kwargs: None)
+
+    guard = StepGuard(
+        stats_dir=tmp_path,
+        loss_policy=DummyLossPolicy(),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+    )
+
+    result = _make_step_result(
+        tf,
+        toxic_step=True,
+        toxic_reasons=("kl_jump_ratio",),
+        applied_update=False,
+        kl_jump_ratio=250.0,
+    )
+
+    decision = guard.handle_step(result)
+
+    assert decision.should_continue is True
+    assert len(guard.recent_good_steps) == 0

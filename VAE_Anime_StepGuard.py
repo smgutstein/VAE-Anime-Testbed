@@ -98,7 +98,7 @@ class StepGuard:
         loss_bad = self._loss_bad(result)
         latent_bad = self._latent_bad(result)
 
-        if (not loss_bad) and (not latent_bad):
+        if self._is_good_step(result, loss_bad=loss_bad, latent_bad=latent_bad):
             self._record_good_step(result)
 
         if self._is_suspicious(result, loss_bad=loss_bad, latent_bad=latent_bad):
@@ -123,6 +123,14 @@ class StepGuard:
             )
 
         return GuardDecision()
+    
+    def _is_good_step(self, result: StepResult, *, loss_bad: bool, latent_bad: bool) -> bool:
+        return (
+            not loss_bad
+            and not latent_bad
+            and result.applied_update
+            and not result.toxic_step
+        )
 
     def _loss_bad(self, result: StepResult) -> bool:
         return (
