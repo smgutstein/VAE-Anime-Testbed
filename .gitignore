@@ -60,7 +60,6 @@ configs/config_beta_5000.ini
 
 # Optional local helper
 ExptSearcher.py
-ExptSummarizer.py
 
 # .env files
 *.env
