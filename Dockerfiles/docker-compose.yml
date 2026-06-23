@@ -21,7 +21,7 @@ services:
       - ..:/workspace
 
     environment:
-      # Passed by docker_vae.sh. Defaults keep compose usable without the wrapper.
+      # May be supplied by a wrapper script. Defaults keep compose usable directly.
       USER_NAME: "${USER_NAME:-vaeuser}"
       GROUP_NAME: "${GROUP_NAME:-vaeuser}"
       HOST_UID: "${HOST_UID:-1000}"
