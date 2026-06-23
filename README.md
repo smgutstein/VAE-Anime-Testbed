@@ -94,6 +94,7 @@ This makes it useful to compare models at, or near, points where their Pareto fr
 <p align="center">
   <img src="./docs/row_B1000.png" alt="row_B1000.png" width="70%">
 </p>
+
 ### Key observation at curve intersections
 At the intersections between the greedy-β frontier and the β = 1 and β = 10 frontiers, reconstruction quality is similar, but the greedy-β model produces visibly better generated samples in these examples. This suggests that the two scalar loss terms do not fully explain generation quality, or that their relationship to generation quality is mediated by additional latent-distribution behavior. 
 
@@ -115,7 +116,14 @@ cd <REPO_DIR>
 ```
 
 ### 2. Create and activate the environment
-This project is intended to run in a GPU-enabled Conda environment:
+This project is intended to run either in a GPU-enabled Docker container or in a GPU-enabled Conda environment:
+
+To create the Docker container (if necessary) and spin it up, one just needs to execute
+
+```bash
+./Dockerfiles/vae_shell.sh 
+```
+which will open a bash shell in the Docker container within which one can run the VAE Test Bed. Or, if one wants to run without using a Docker container, a conda env may be created as follows:
 
 
 ```bash
@@ -140,9 +148,9 @@ The project supports both fixed-β and adaptive KL-weighting experiments through
 Launch a baseline experiment with a fixed value of β:
 
 ```bash
-python VAE_Anime_Train.py --config_file config_beta_1.ini
+python VAE_Anime_Train.py --config_file config_smoke_tester.ini
 ```
-
+Note: `config_smoke_tester.ini` is the quick smoke-test config. It trains for only 5 epochs and is intended to verify that the pipeline runs end-to-end.
 
 ### 5. Run an adaptive greedy-β experiment
 Launch an experiment using the adaptive controller:

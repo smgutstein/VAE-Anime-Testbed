@@ -1,0 +1,44 @@
+services:
+  vae-anime:
+    build:
+      # This compose file lives in Dockerfiles/.
+      # Therefore context "." means the Docker build context is Dockerfiles/,
+      # not the repository root.
+      # The project source itself is mounted separately at runtime as /workspace.
+      context: .
+      dockerfile: Dockerfile
+
+    image: vae-anime-tf216:dev
+    container_name: vae-anime-dev
+    init: true
+
+    # Inside the container, /workspace is the project root.
+    working_dir: /workspace
+
+    # Mount the repository root into /workspace.
+    # Since this compose file lives in Dockerfiles/, ".." is the project root.
+    volumes:
+      - ..:/workspace
+
+    environment:
+      # Passed by docker_vae.sh. Defaults keep compose usable without the wrapper.
+      USER_NAME: "${USER_NAME:-vaeuser}"
+      GROUP_NAME: "${GROUP_NAME:-vaeuser}"
+      HOST_UID: "${HOST_UID:-1000}"
+      HOST_GID: "${HOST_GID:-1000}"
+
+      # TensorFlow / Python runtime defaults.
+      TF_CPP_MIN_LOG_LEVEL: "2"
+      TF_ENABLE_ONEDNN_OPTS: "0"
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: "1"
+
+    # Give the container access to NVIDIA GPUs.
+    gpus: all
+
+    # Useful defaults for ML workloads.
+    ipc: host
+    shm_size: "2g"
+
+    # Keep the dev container running.
+    command: tail -f /dev/null
