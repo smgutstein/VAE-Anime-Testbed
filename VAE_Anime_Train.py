@@ -476,14 +476,9 @@ class VAE_Trainer:
         finally:
             self.monitor.close()
 
-    #############################################################
-
-
 #############################################################
 
-
-if __name__ == "__main__":
-
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Train the anime VAE from a config file."
     )
@@ -520,3 +515,10 @@ if __name__ == "__main__":
         if vae.cfg.make_mu_log_var_movies:
             ar.movie_builder.make_mu_log_var_movie(log_var_graph=True)
             ar.movie_builder.make_mu_log_var_movie(log_var_graph=False)
+
+    return 0
+#############################################################
+   
+
+if __name__ == "__main__":
+    raise SystemExit(main())
