@@ -69,7 +69,7 @@ The VAE objective contains two terms that measure different model behaviors. As 
 
 The figure above shows that the constant-β VAEs have relatively short Pareto frontiers that are close to horizontal, with a slight negative slope. As β increases, these frontiers shift down, toward lower KL loss, and to the right, toward higher reconstruction loss. That is consistent with the expected effect of increasing KL pressure.
 
-In contrast, the adaptive greedy-β run traces out a frontier that appears parabolic and covers a much larger region of loss space than any individual constant-β run.
+In contrast, the adaptive greedy-β run traces out a frontier that appears parabolic and covers a much larger region of loss space than any individual constant-β run. In the two diagrams , the points in loss space visited by the greedy-β run are first shown in the foreground and then shown in the background with respect to the const-β runs. This is done to give a more clear indication of behavior in overlapping regions.
 
 <p align="center">
   <img src="./docs/LossTrajs_421__expt_422__expt_423__expt_424__expt_425.png" alt="Loss Trajectories" width="70%">
