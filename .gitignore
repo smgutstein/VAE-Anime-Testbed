@@ -36,6 +36,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
 # Local editor settings
 .vscode/
@@ -44,6 +45,7 @@ __pycache__/
 Untitled*.ipynb
 history.txt
 dataset_reproducibility.patch
+*.patch
 
 # Local/legacy experiment configs not part of clean snapshot
 configs/config.ini
@@ -64,4 +66,7 @@ ExptSearcher.py
 # .env files
 *.env
 !.env.example
+
+
+.ipynb_checkpoints/
 

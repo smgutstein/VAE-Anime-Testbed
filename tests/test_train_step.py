@@ -48,12 +48,12 @@ class TestTrainStepIntegration:
         return trainer_like, x, loss_fn, optimizer, kl_weight, prev_kl
 
     def _run_step(self, tmp_path, tf, kl_weight_value=0.5):
-        from VAE_Anime_Train import VAE_Trainer
+        from VAE_Anime_TrainStep import train_step
 
         trainer_like, x, loss_fn, optimizer, kl_weight, prev_kl = \
             self._make_step_context(tmp_path, tf, kl_weight_value=kl_weight_value)
 
-        return VAE_Trainer.train_step(
+        return train_step(
             x,
             kl_weight,
             prev_kl,
@@ -94,12 +94,12 @@ class TestTrainStepIntegration:
         assert bool(applied_update.numpy()) is True
 
     def test_build_step_result_converts_raw_outputs(self, tmp_path, tf):
-        from VAE_Anime_Train import VAE_Trainer
+        from VAE_Anime_TrainStep import build_step_result
 
         raw = self._run_step(tmp_path, tf)
         x_batch_train = tf.zeros((4, 16, 16, 3), dtype=tf.float32)
 
-        result = VAE_Trainer._build_step_result(
+        result = build_step_result(
             raw_step_output=raw,
             x_batch_train=x_batch_train,
             epoch=3,
