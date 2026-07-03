@@ -27,6 +27,9 @@ class StepResult:
 
     loss_recon: float
     loss_kl: float
+    recon_ssim: float
+    kl_per_dim: tuple[float, ...]
+    active_latent_dims: int
 
     grad_norm: float
     max_log_var: float
@@ -170,6 +173,9 @@ class StepGuard:
                 "log_var": tf.identity(result.log_var),
                 "curr_loss_recon": float(result.loss_recon),
                 "curr_loss_kl": float(result.loss_kl),
+                "recon_ssim": float(result.recon_ssim),
+                "kl_per_dim": tuple(float(x) for x in result.kl_per_dim),
+                "active_latent_dims": int(result.active_latent_dims),
                 "kl_weight": float(result.kl_weight),
             }
         )
@@ -288,6 +294,9 @@ class StepGuard:
         )
         diagnostics["kl_jump_ratio"] = float(result.kl_jump_ratio)
         diagnostics["grad_norm"] = float(result.grad_norm)
+        diagnostics["recon_ssim"] = float(result.recon_ssim)
+        diagnostics["kl_per_dim"] = [float(x) for x in result.kl_per_dim]
+        diagnostics["active_latent_dims"] = int(result.active_latent_dims)
         diagnostics["max_log_var"] = float(result.max_log_var)
         diagnostics["min_log_var"] = float(result.min_log_var)
         diagnostics["max_abs_mu"] = float(result.max_abs_mu)

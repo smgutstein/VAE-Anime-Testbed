@@ -80,6 +80,19 @@ class TestTrainStepIntegration:
         assert bool(tf.reduce_all(tf.math.is_finite(mu)).numpy())
         assert bool(tf.reduce_all(tf.math.is_finite(log_var)).numpy())
 
+    def test_recon_ssim_kl_per_dim_and_active_dims_are_valid(self, tmp_path, tf):
+        _, loss_kl, mu, _, recon_ssim, kl_per_dim, active_latent_dims, *_ = \
+            self._run_step(tmp_path, tf)
+
+        assert np.isfinite(recon_ssim.numpy())
+        assert -1.0 <= float(recon_ssim.numpy()) <= 1.0
+        assert kl_per_dim.shape == (mu.shape[1],)
+        assert bool(tf.reduce_all(tf.math.is_finite(kl_per_dim)).numpy())
+        assert float(tf.reduce_mean(kl_per_dim).numpy()) == pytest.approx(
+            float(loss_kl.numpy())
+        )
+        assert 0 <= int(active_latent_dims.numpy()) <= mu.shape[1]
+
     def test_kl_weight_zero_does_not_cause_nan(self, tmp_path, tf):
         loss_recon, loss_kl, *_ = self._run_step(tmp_path, tf, kl_weight_value=0.0)
 
@@ -112,6 +125,11 @@ class TestTrainStepIntegration:
         assert result.kl_weight == pytest.approx(0.5)
         assert isinstance(result.loss_recon, float)
         assert isinstance(result.loss_kl, float)
+        assert isinstance(result.recon_ssim, float)
+        assert isinstance(result.kl_per_dim, tuple)
+        assert isinstance(result.active_latent_dims, int)
+        assert len(result.kl_per_dim) == result.mu.shape[1]
+        assert 0 <= result.active_latent_dims <= result.mu.shape[1]
         assert isinstance(result.toxic_step, bool)
         assert isinstance(result.toxic_reasons, tuple)
         assert isinstance(result.applied_update, bool)

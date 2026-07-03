@@ -2,7 +2,8 @@ import pickle
 from pathlib import Path
 from VAE_Anime_Artifacts import (
     LOSS_TEXT_FILE, LOSS_EVENTS_FILE, LATENT_STATS_FILE, LATENT_VAR_STATS_FILE,
-    LossEventChunk, LatentMeanChunk, LatentVarChunk
+    LATENT_KL_STATS_FILE,
+    LossEventChunk, LatentMeanChunk, LatentVarChunk, LatentKLChunk
 )
 
 
@@ -13,12 +14,14 @@ class ArtifactWriter:
         self.loss_events_fh = None
         self.latent_stats_fh = None
         self.latent_var_stats_fh = None
+        self.latent_kl_stats_fh = None
 
     def open(self):
         self.loss_text_fh = open(self.stats_dir / LOSS_TEXT_FILE, "w")
         self.loss_events_fh = open(self.stats_dir / LOSS_EVENTS_FILE, "wb")
         self.latent_stats_fh = open(self.stats_dir / LATENT_STATS_FILE, "wb")
         self.latent_var_stats_fh = open(self.stats_dir / LATENT_VAR_STATS_FILE, "wb")
+        self.latent_kl_stats_fh = open(self.stats_dir / LATENT_KL_STATS_FILE, "wb")
         return self
 
     def write_loss_text_header(self):
@@ -56,11 +59,20 @@ class ArtifactWriter:
 
 
 
-    def write_loss_chunk(self, recon_loss, kl_loss, kl_weight):
+    def write_loss_chunk(
+        self,
+        recon_loss,
+        kl_loss,
+        kl_weight,
+        recon_ssim=None,
+        active_latent_dims=None,
+    ):
         chunk = LossEventChunk(
             recon_loss=list(recon_loss),
             kl_loss=list(kl_loss),
             kl_weight=list(kl_weight),
+            recon_ssim=list(recon_ssim or []),
+            active_latent_dims=list(active_latent_dims or []),
         )
         pickle.dump(chunk, self.loss_events_fh)
 
@@ -78,12 +90,19 @@ class ArtifactWriter:
         )
         pickle.dump(chunk, self.latent_var_stats_fh)
 
+    def write_latent_kl_chunk(self, kl_per_dim):
+        chunk = LatentKLChunk(
+            kl_per_dim=list(kl_per_dim),
+        )
+        pickle.dump(chunk, self.latent_kl_stats_fh)
+
     def flush(self):
         for fh in (
             self.loss_text_fh,
             self.loss_events_fh,
             self.latent_stats_fh,
             self.latent_var_stats_fh,
+            self.latent_kl_stats_fh,
         ):
             if fh is not None:
                 fh.flush()
@@ -94,6 +113,7 @@ class ArtifactWriter:
             self.loss_events_fh,
             self.latent_stats_fh,
             self.latent_var_stats_fh,
+            self.latent_kl_stats_fh,
         ):
             if fh is not None:
                 fh.close()

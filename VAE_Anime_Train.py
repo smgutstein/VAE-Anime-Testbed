@@ -250,6 +250,8 @@ class VAE_Trainer:
                         curr_loss_recon=curr_loss_recon,
                         curr_loss_kl=curr_loss_kl,
                         curr_kl_weight=curr_kl_weight,
+                        recon_ssim=step_result.recon_ssim,
+                        active_latent_dims=step_result.active_latent_dims,
                     )
 
                     self.monitor.record_latent_stats(
@@ -257,6 +259,7 @@ class VAE_Trainer:
                         log_var_mean=tf.reduce_mean(step_result.log_var, 0),
                         mu_var=tf.math.reduce_variance(step_result.mu, 0),
                         log_var_var=tf.math.reduce_variance(step_result.log_var, 0),
+                        kl_per_dim=step_result.kl_per_dim,
                     )
 
                     self.monitor.maybe_flush_step(step)

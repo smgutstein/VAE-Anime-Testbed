@@ -19,11 +19,14 @@ class TrainingMonitor:
         self.recon_loss_list = []
         self.kl_loss_list = []
         self.kl_weight_list = []
+        self.recon_ssim_list = []
+        self.active_latent_dims_list = []
 
         self.mu_list = []
         self.log_var_list = []
         self.mu_var_list = []
         self.log_var_var_list = []
+        self.kl_per_dim_list = []
 
         self.writer = ArtifactWriter(self.stats_dir)
 
@@ -81,16 +84,38 @@ class TrainingMonitor:
             max_grad_norm=max_grad_norm,
         )
 
-    def record_losses(self, curr_loss_recon, curr_loss_kl, curr_kl_weight):
+    def record_losses(
+        self,
+        curr_loss_recon,
+        curr_loss_kl,
+        curr_kl_weight,
+        recon_ssim=None,
+        active_latent_dims=None,
+    ):
         self.recon_loss_list.append(float(curr_loss_recon))
         self.kl_loss_list.append(float(curr_loss_kl))
         self.kl_weight_list.append(float(curr_kl_weight))
 
-    def record_latent_stats(self, mu_mean, log_var_mean, mu_var, log_var_var):
+        if recon_ssim is not None:
+            self.recon_ssim_list.append(float(recon_ssim))
+        if active_latent_dims is not None:
+            self.active_latent_dims_list.append(int(active_latent_dims))
+
+    def record_latent_stats(
+        self,
+        mu_mean,
+        log_var_mean,
+        mu_var,
+        log_var_var,
+        kl_per_dim=None,
+    ):
         self.mu_list.append(mu_mean)
         self.log_var_list.append(log_var_mean)
         self.mu_var_list.append(mu_var)
         self.log_var_var_list.append(log_var_var)
+
+        if kl_per_dim is not None:
+            self.kl_per_dim_list.append(kl_per_dim)
 
     def maybe_flush_step(self, step):
         if self.is_snapshot_step(step):
@@ -101,10 +126,13 @@ class TrainingMonitor:
             self.recon_loss_list
             or self.kl_loss_list
             or self.kl_weight_list
+            or self.recon_ssim_list
+            or self.active_latent_dims_list
             or self.mu_list
             or self.log_var_list
             or self.mu_var_list
             or self.log_var_var_list
+            or self.kl_per_dim_list
         ):
             return
 
@@ -112,6 +140,8 @@ class TrainingMonitor:
             recon_loss=self.recon_loss_list,
             kl_loss=self.kl_loss_list,
             kl_weight=self.kl_weight_list,
+            recon_ssim=self.recon_ssim_list,
+            active_latent_dims=self.active_latent_dims_list,
         )
         self.writer.write_latent_chunk(
             mu=self.mu_list,
@@ -121,14 +151,20 @@ class TrainingMonitor:
             mu_var=self.mu_var_list,
             log_var_var=self.log_var_var_list,
         )
+        self.writer.write_latent_kl_chunk(
+            kl_per_dim=self.kl_per_dim_list,
+        )
         self.writer.flush()
 
         self.recon_loss_list.clear()
         self.kl_loss_list.clear()
         self.kl_weight_list.clear()
+        self.recon_ssim_list.clear()
+        self.active_latent_dims_list.clear()
         self.mu_list.clear()
         self.log_var_list.clear()
         self.mu_var_list.clear()
         self.log_var_var_list.clear()
+        self.kl_per_dim_list.clear()
 
         logging.info("Flushed partial stats buffers")

@@ -19,6 +19,8 @@ class TestArtifactRoundtrip:
             recon_loss=[10.0, 9.0, 8.0],
             kl_loss=[0.1, 0.2, 0.3],
             kl_weight=[1e-6, 2e-6, 3e-6],
+            recon_ssim=[0.5, 0.6, 0.7],
+            active_latent_dims=[2, 3, 4],
         )
         writer.write_latent_chunk(
             mu=[np.array([1.0, 2.0]), np.array([3.0, 4.0])],
@@ -28,6 +30,9 @@ class TestArtifactRoundtrip:
             mu_var=[np.array([0.1, 0.2]), np.array([0.3, 0.4])],
             log_var_var=[np.array([0.01, 0.02]), np.array([0.03, 0.04])],
         )
+        writer.write_latent_kl_chunk(
+            kl_per_dim=[np.array([0.01, 0.02]), np.array([0.03, 0.04])],
+        )
         writer.close()
 
         reader = ArtifactReader(stats_dir)
@@ -35,6 +40,8 @@ class TestArtifactRoundtrip:
         assert loss_series.recon_loss == [10.0, 9.0, 8.0]
         assert loss_series.kl_loss == [0.1, 0.2, 0.3]
         assert loss_series.kl_weight == [1e-6, 2e-6, 3e-6]
+        assert loss_series.recon_ssim == [0.5, 0.6, 0.7]
+        assert loss_series.active_latent_dims == [2, 3, 4]
 
         latent_series = reader.read_latent_series()
         assert len(latent_series.mu) == 2
@@ -43,6 +50,9 @@ class TestArtifactRoundtrip:
         latent_var_series = reader.read_latent_var_series()
         assert len(latent_var_series.mu_var) == 2
         assert len(latent_var_series.log_var_var) == 2
+
+        latent_kl_series = reader.read_latent_kl_series()
+        assert len(latent_kl_series.kl_per_dim) == 2
 
 
 class TestRunArtifacts:

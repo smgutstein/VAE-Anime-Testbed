@@ -10,9 +10,11 @@ from VAE_Anime_Artifacts import (
     LOSS_EVENTS_FILE,
     LATENT_STATS_FILE,
     LATENT_VAR_STATS_FILE,
+    LATENT_KL_STATS_FILE,
     LossEventChunk,
     LatentMeanChunk,
     LatentVarChunk,
+    LatentKLChunk,
 )
 
 
@@ -27,6 +29,8 @@ class LossSeries:
     recon_loss: list[float]
     kl_loss: list[float]
     kl_weight: list[float]
+    recon_ssim: list[float]
+    active_latent_dims: list[int]
 
 
 @dataclass
@@ -39,6 +43,11 @@ class LatentSeries:
 class LatentVarSeries:
     mu_var: list
     log_var_var: list
+
+
+@dataclass
+class LatentKLSeries:
+    kl_per_dim: list
 
 
 class ArtifactReader:
@@ -75,6 +84,15 @@ class ArtifactReader:
 
     def _clean_tensorlike_list(self, values):
         return [x for x in values if self._is_valid_numeric(x)]
+
+    def _clean_int_list(self, values):
+        out = []
+        for x in values:
+            try:
+                out.append(int(x))
+            except Exception:
+                logging.warning("Could not convert integer value: %r", x)
+        return out
 
     def read_loss_series(self):
         new_path = self.stats_dir / LOSS_EVENTS_FILE
@@ -115,10 +133,20 @@ class ArtifactReader:
             f"Missing latent variance artifacts: neither {new_path} nor {legacy_path} exists"
         )
 
+
+    def read_latent_kl_series(self):
+        new_path = self.stats_dir / LATENT_KL_STATS_FILE
+        if new_path.exists():
+            return self._read_new_latent_kl_series(new_path)
+
+        raise FileNotFoundError(f"Missing latent KL artifact: {new_path}")
+
     def _read_new_loss_series(self, path):
         recon_loss = []
         kl_loss = []
         kl_weight = []
+        recon_ssim = []
+        active_latent_dims = []
 
         for obj in self._iter_pickled_objects(path):
             if not isinstance(obj, LossEventChunk):
@@ -127,16 +155,23 @@ class ArtifactReader:
             recon_loss += obj.recon_loss
             kl_loss += obj.kl_loss
             kl_weight += obj.kl_weight
+            recon_ssim += getattr(obj, "recon_ssim", [])
+            active_latent_dims += getattr(obj, "active_latent_dims", [])
 
         recon_loss = self._clean_scalar_list(recon_loss)
         kl_loss = self._clean_scalar_list(kl_loss)
         kl_weight = self._clean_scalar_list(kl_weight)
+        recon_ssim = self._clean_scalar_list(recon_ssim)
+        active_latent_dims = self._clean_int_list(active_latent_dims)
 
         n = min(len(recon_loss), len(kl_loss), len(kl_weight))
+        metric_n = min(n, len(recon_ssim), len(active_latent_dims))
         return LossSeries(
             recon_loss=recon_loss[:n],
             kl_loss=kl_loss[:n],
             kl_weight=kl_weight[:n],
+            recon_ssim=recon_ssim[:metric_n],
+            active_latent_dims=active_latent_dims[:metric_n],
         )
 
     def _read_new_latent_series(self, path):
@@ -173,6 +208,20 @@ class ArtifactReader:
         n = min(len(mu_var), len(log_var_var))
         return LatentVarSeries(mu_var=mu_var[:n], log_var_var=log_var_var[:n])
 
+
+    def _read_new_latent_kl_series(self, path):
+        kl_per_dim = []
+
+        for obj in self._iter_pickled_objects(path):
+            if not isinstance(obj, LatentKLChunk):
+                logging.warning("Unexpected object in %s: %s", path, type(obj))
+                continue
+            kl_per_dim += obj.kl_per_dim
+
+        return LatentKLSeries(
+            kl_per_dim=self._clean_tensorlike_list(kl_per_dim),
+        )
+
     def _read_legacy_loss_series(self, path):
         recon_loss = []
         kl_loss = []
@@ -195,6 +244,8 @@ class ArtifactReader:
             recon_loss=recon_loss[:n],
             kl_loss=kl_loss[:n],
             kl_weight=kl_weight[:n],
+            recon_ssim=[],
+            active_latent_dims=[],
         )
 
     def _read_legacy_latent_series(self, path):

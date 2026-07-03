@@ -19,9 +19,18 @@ def train_step(
         reconstructed, mu, log_var = model(x_batch_train)
 
         loss_recon = loss_fn(x_batch_train, reconstructed) * num_input_pixels
-        loss_kl = tf.reduce_mean(
+        recon_ssim = tf.reduce_mean(
+            tf.image.ssim(x_batch_train, reconstructed, max_val=1.0)
+        )
+
+        kl_by_sample_and_dim = -0.5 * (
             1.0 + log_var - tf.square(mu) - tf.exp(log_var)
-        ) * -0.5
+        )
+        kl_per_dim = tf.reduce_mean(kl_by_sample_and_dim, axis=0)
+        active_latent_dims = tf.reduce_sum(
+            tf.cast(kl_per_dim > tf.constant(1e-2, dtype=kl_per_dim.dtype), tf.int32)
+        )
+        loss_kl = tf.reduce_mean(kl_per_dim)
         loss_tot = loss_recon + beta_factor * loss_kl
 
     grads = tape.gradient(loss_tot, model.trainable_weights)
@@ -118,6 +127,9 @@ def train_step(
         loss_kl,
         mu,
         log_var,
+        recon_ssim,
+        kl_per_dim,
+        active_latent_dims,
         grad_norm,
         max_log_var,
         min_log_var,
@@ -135,6 +147,9 @@ def build_step_result(raw_step_output, x_batch_train, epoch, step, kl_weight):
         loss_kl,
         mu,
         log_var,
+        recon_ssim,
+        kl_per_dim,
+        active_latent_dims,
         grad_norm,
         max_log_var,
         min_log_var,
@@ -154,6 +169,9 @@ def build_step_result(raw_step_output, x_batch_train, epoch, step, kl_weight):
         log_var=log_var,
         loss_recon=float(loss_recon.numpy()),
         loss_kl=float(loss_kl.numpy()),
+        recon_ssim=float(recon_ssim.numpy()),
+        kl_per_dim=tuple(float(x) for x in kl_per_dim.numpy().tolist()),
+        active_latent_dims=int(active_latent_dims.numpy()),
         grad_norm=float(grad_norm.numpy()),
         max_log_var=float(max_log_var.numpy()),
         min_log_var=float(min_log_var.numpy()),
