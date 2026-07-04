@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import argparse
 import configparser
 from pathlib import Path
 
@@ -182,8 +183,113 @@ def summarize_expt_configs(expts_dir: str | Path = "./expts") -> pd.DataFrame:
     return summary
 
 
+
+
+def summarize_selected_expts(
+    expt_nums: int | list[int] | tuple[int, ...] | set[int],
+    expts_dir: str | Path = "./expts",
+) -> pd.DataFrame:
+    """
+    Return one config/artifact-summary row per requested experiment.
+
+    This is intended for notebook use:
+
+        summarize_selected_expts([1, 2, 7])
+
+    In Jupyter, the returned DataFrame will display naturally as a pandas table.
+    """
+    if isinstance(expt_nums, int):
+        requested = [expt_nums]
+    else:
+        requested = list(expt_nums)
+
+    df = read_expt_configs(expts_dir)
+
+    if df.empty:
+        return df
+
+    return (
+        df[df["expt_num"].isin(requested)]
+        .sort_values("expt_num")
+        .reset_index(drop=True)
+    )
+
+
+def summarize_expts(
+    expts_dir: str | Path = "./expts",
+    show_expts: int | list[int] | tuple[int, ...] | set[int] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """
+    Return the grouped experiment summary and, optionally, selected experiments.
+
+    This is useful in notebooks when you want both tables:
+
+        summary, selected = summarize_expts(show_expts=[1, 2, 7])
+        summary
+        selected
+    """
+    summary = summarize_expt_configs(expts_dir)
+
+    selected = None
+    if show_expts is not None:
+        selected = summarize_selected_expts(show_expts, expts_dir=expts_dir)
+
+    return summary, selected
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Summarize VAE experiment configs and optionally show selected "
+            "per-experiment config summaries."
+        )
+    )
+
+    parser.add_argument(
+        "--expts-dir",
+        default="./expts",
+        help="Directory containing expt_*/config.ini folders. Default: ./expts",
+    )
+
+    parser.add_argument(
+        "--show-expts",
+        nargs="+",
+        type=int,
+        default=None,
+        metavar="EXPT_NUM",
+        help=(
+            "Optional experiment numbers to display in detail, in addition to "
+            "the grouped summary table. Example: --show-expts 1 2 7"
+        ),
+    )
+
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    summary = summarize_expt_configs("./expts")
+    args = parse_args()
 
     pd.set_option("display.max_colwidth", None)
+
+    summary, selected = summarize_expts(
+        expts_dir=args.expts_dir,
+        show_expts=args.show_expts,
+    )
+
+    print("\nGrouped experiment summary:")
     print(summary.to_string(index=False))
+
+    if selected is not None:
+        print("\nSelected experiment summaries:")
+
+        if selected.empty:
+            print(f"No matching experiments found for: {args.show_expts}")
+        else:
+            print(selected.to_string(index=False))
+
+            found = set(selected["expt_num"].tolist())
+            missing = sorted(set(args.show_expts) - found)
+            if missing:
+                print(
+                    "\nWarning: no matching config.ini found "
+                    f"for experiments: {missing}"
+                )

@@ -23,6 +23,8 @@ class TestAnalyzeResults:
             recon_loss=[10.0, 9.0, 8.0, 7.0],
             kl_loss=[0.1, 0.15, 0.2, 0.25],
             kl_weight=[1e-6, 2e-6, 3e-6, 4e-6],
+            recon_ssim=[0.3, 0.4, 0.5, 0.6],
+            active_latent_dims=[1, 2, 2, 3],
         )
         writer.write_latent_chunk(
             mu=[np.array([1.0, 2.0, 3.0]), np.array([1.5, 2.5, 3.5])],
@@ -31,6 +33,14 @@ class TestAnalyzeResults:
         writer.write_latent_var_chunk(
             mu_var=[np.array([0.1, 0.2, 0.3]), np.array([0.15, 0.25, 0.35])],
             log_var_var=[np.array([0.01, 0.02, 0.03]), np.array([0.015, 0.025, 0.035])],
+        )
+        writer.write_latent_kl_chunk(
+            kl_per_dim=[
+                np.array([0.01, 0.02, 0.03]),
+                np.array([0.02, 0.03, 0.04]),
+                np.array([0.03, 0.04, 0.05]),
+                np.array([0.04, 0.05, 0.06]),
+            ],
         )
         writer.close()
 
@@ -50,5 +60,8 @@ class TestAnalyzeResults:
         assert (stats_dir / "Pareto_Comparisons.png").exists()
         assert (stats_dir / "Recon_KL_Comp_1.png").exists()
         assert (stats_dir / "Recon_KL_Comp_2.png").exists()
+        assert (stats_dir / "Active_Latent_Dims.png").exists()
+        assert (stats_dir / "KL_Per_Dim.png").exists()
+        assert (stats_dir / "Recon_Loss_vs_SSIM.png").exists()
         assert (stats_dir / "mu.png").exists()
         assert (stats_dir / "log_var.png").exists()

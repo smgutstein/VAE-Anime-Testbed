@@ -144,6 +144,7 @@ class AnalyzeResults():
         self.latent_plotter.make_final_mu_log_var_graphs()
         self.loss_plotter.compare_recon_kl_losses()  
         self.loss_plotter.compare_recon_kl_losses2()
+        self.loss_plotter.make_diagnostic_graphs()
 
     def get_recon_kl_results(self):
         series = self.reader.read_loss_series()
