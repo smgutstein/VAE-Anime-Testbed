@@ -7,6 +7,7 @@ class _CfgStub:
     step_guard_kl_jump_ratio_threshold = 100.0
     step_guard_kl_abs_threshold = 1e6
     step_guard_max_log_var_threshold = 20.0
+    active_dim_kl_threshold = 1e-2
 
 
 class _TrainerLikeStub:

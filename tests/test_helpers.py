@@ -62,6 +62,7 @@ def write_minimal_config(path: Path, parent_dir: Path, use_legacy_kl_names: bool
         "take_initial_snapshot": "False",
         "run_analysis": "False",
         "make_mu_log_var_movies": "False",
+        "active_dim_kl_threshold": "0.01",
     }
 
     cfg["Reproducibility"] = {
@@ -127,6 +128,7 @@ def make_config_ini_text(
     take_initial_snapshot="false",
     run_analysis="false",
     make_mu_log_var_movies="false",
+    active_dim_kl_threshold="0.01",
     seed="42",
     deterministic="false",
     include_reproducibility=True,
@@ -207,6 +209,7 @@ def make_config_ini_text(
         parts.append(f"take_initial_snapshot = {take_initial_snapshot}")
         parts.append(f"run_analysis = {run_analysis}")
         parts.append(f"make_mu_log_var_movies = {make_mu_log_var_movies}")
+        parts.append(f"active_dim_kl_threshold = {active_dim_kl_threshold}")
 
     if include_reproducibility:
         parts.append("[Reproducibility]")

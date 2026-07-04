@@ -161,6 +161,162 @@ class AnalyzeResults():
         return recon_pts, kl_pts
 
 
+
+    def _axis_limits_from_percentiles(self, points, lower_pct=0, upper_pct=99.9):
+        """
+        Return stable plot limits for a movie axis.
+
+        Percentile-based limits keep a small number of extreme points from
+        making the moving scatter plot unreadable. If all values are identical,
+        add a small padding so Matplotlib does not warn about singular limits.
+        """
+        points = np.asarray(points, dtype=float)
+        min_val, max_val = np.percentile(points, [lower_pct, upper_pct])
+
+        if min_val == max_val:
+            pad = 0.5 if min_val == 0 else abs(min_val) * 0.05
+            min_val -= pad
+            max_val += pad
+
+        return min_val, max_val
+
+    def _make_growing_scatter_movie(
+        self,
+        x_pts,
+        y_pts,
+        movie_name,
+        description,
+        xlabel,
+        ylabel,
+        title,
+        y_log=False,
+    ):
+        """
+        Make a growing scatter-plot movie, matching the Pareto movie style.
+
+        Each frame contains all points up to the current stop point. Point color
+        encodes temporal order, so the movie shows how the relationship evolves
+        during training without implying that active-dimension values are
+        monotonic or linearly connected.
+        """
+        x_pts = np.asarray(x_pts, dtype=float)
+        y_pts = np.asarray(y_pts, dtype=float)
+        n = min(len(x_pts), len(y_pts))
+        if n == 0:
+            logging.warning("Skipping %s movie: no points available", description)
+            return False
+
+        x_pts = x_pts[:n]
+        y_pts = y_pts[:n]
+
+        if y_log:
+            valid_mask = y_pts > 0
+            if not np.any(valid_mask):
+                logging.warning(
+                    "Skipping %s movie: log-scale y-axis has no positive points",
+                    description,
+                )
+                return False
+            x_pts = x_pts[valid_mask]
+            y_pts = y_pts[valid_mask]
+            n = len(x_pts)
+
+        skip_pts = int(0.05 * n)
+        x_pts = x_pts[skip_pts:]
+        y_pts = y_pts[skip_pts:]
+        num_points = len(x_pts)
+        if num_points == 0:
+            logging.warning("Skipping %s movie: no points remain after skipping warmup", description)
+            return False
+
+        min_x, max_x = self._axis_limits_from_percentiles(x_pts)
+        min_y, max_y = self._axis_limits_from_percentiles(y_pts)
+
+        frame_len = max(1, int(0.05 * num_points))
+        frame_delta = max(1, int(0.1 * frame_len))
+        num_frames = int((num_points - frame_len) / frame_delta) + 1
+
+        outpath = self.movies_dir / movie_name
+        writer = imageio.get_writer(outpath, fps=5)
+
+        for idx in tqdm(range(num_frames + 1), desc=f"Making movie for {description}"):
+            stop = min(idx * frame_delta + frame_len, num_points)
+            if stop <= 0:
+                continue
+
+            x_frame = x_pts[:stop]
+            y_frame = y_pts[:stop]
+            colors = np.arange(len(x_frame))
+
+            fig, ax = plt.subplots()
+            scatter = ax.scatter(x_frame, y_frame, s=1, c=colors, cmap="cool")
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            ax.set_title(title)
+            ax.set_xlim([min_x, max_x])
+            ax.set_ylim([min_y, max_y])
+            if y_log:
+                ax.set_yscale("log")
+
+            color_bar = fig.colorbar(scatter)
+            color_bar.set_label("Pt Number")
+
+            canvas = FigureCanvas(fig)
+            canvas.draw()
+            buf = canvas.buffer_rgba()
+            image = Image.frombytes(
+                "RGBA",
+                canvas.get_width_height(),
+                bytes(buf),
+                "raw",
+                "RGBA",
+                0,
+                1,
+            )
+            writer.append_data(np.array(image))
+            plt.close(fig)
+
+        writer.close()
+        logging.info(f"Saved {outpath}")
+        return True
+
+    def make_active_dims_relationship_movies(self):
+        """
+        Make movies for active latent dimensions vs KL/reconstruction loss.
+
+        These mirror ``make_pareto_movie``: each frame shows the accumulated
+        scatter points up to that point in training, with point color serving as
+        a proxy for iteration/time.
+        """
+        series = self.reader.read_loss_series()
+        active_dims = series.active_latent_dims
+
+        made_kl = self._make_growing_scatter_movie(
+            active_dims,
+            series.kl_loss,
+            movie_name="active_dims_vs_kl_loss.mp4",
+            description="active dims vs kl loss",
+            xlabel="Active Latent Dimensions",
+            ylabel="KL Loss",
+            title="Active Latent Dimensions vs KL Loss",
+            y_log=True,
+        )
+        made_recon = self._make_growing_scatter_movie(
+            active_dims,
+            series.recon_loss,
+            movie_name="active_dims_vs_recon_loss.mp4",
+            description="active dims vs recon loss",
+            xlabel="Active Latent Dimensions",
+            ylabel="Recon Loss",
+            title="Active Latent Dimensions vs Recon Loss",
+            y_log=False,
+        )
+
+        return {
+            "active_dims_vs_kl_loss": made_kl,
+            "active_dims_vs_recon_loss": made_recon,
+        }
+
     def make_pareto_movie(self):
 
         # Read file with recon and kl losses
@@ -289,6 +445,7 @@ if __name__ == "__main__":
     ar.make_singleton_graphs()  
     ar.movie_builder.make_images_movie()
     ar.make_pareto_movie()
+    ar.make_active_dims_relationship_movies()
     ar.make_pareto_curve_graph()
     if args.stat_graphs:
         ar.movie_builder.make_mu_log_var_movie(log_var_graph=True)

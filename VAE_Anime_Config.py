@@ -95,6 +95,7 @@ class TrainerConfig:
     take_initial_snapshot: bool
     run_analysis: bool
     make_mu_log_var_movies: bool
+    active_dim_kl_threshold: float
 
     # Reproducibility
     seed: int
@@ -229,6 +230,11 @@ class TrainerConfig:
                 config.get("Monitoring_Parameters", "make_mu_log_var_movies"),
                 "make_mu_log_var_movies",
             ),
+            active_dim_kl_threshold=config.getfloat(
+                "Monitoring_Parameters",
+                "active_dim_kl_threshold",
+                fallback=1e-2,
+            ),
 
             # Reproducibility
             seed=seed,
@@ -287,6 +293,8 @@ class TrainerConfig:
             raise ValueError("tripwire_lr_floor must be > 0")
         if self.max_consecutive_tripwires <= 0:
             raise ValueError("max_consecutive_tripwires must be > 0")
+        if self.active_dim_kl_threshold <= 0:
+            raise ValueError("active_dim_kl_threshold must be > 0")
 
         if self.batch_size <= 0:
             raise ValueError("batch_size must be > 0")

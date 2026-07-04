@@ -27,8 +27,12 @@ def train_step(
             1.0 + log_var - tf.square(mu) - tf.exp(log_var)
         )
         kl_per_dim = tf.reduce_mean(kl_by_sample_and_dim, axis=0)
+        active_dim_kl_threshold = tf.constant(
+            vae_obj.cfg.active_dim_kl_threshold,
+            dtype=kl_per_dim.dtype,
+        )
         active_latent_dims = tf.reduce_sum(
-            tf.cast(kl_per_dim > tf.constant(1e-2, dtype=kl_per_dim.dtype), tf.int32)
+            tf.cast(kl_per_dim > active_dim_kl_threshold, tf.int32)
         )
         loss_kl = tf.reduce_mean(kl_per_dim)
         loss_tot = loss_recon + beta_factor * loss_kl

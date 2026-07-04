@@ -13,6 +13,7 @@ class TestConfigLoading:
         assert cfg.initial_kl_weight == 1e-6
         assert cfg.max_kl_weight == 10.0
         assert cfg.kl_weight_update_factor == 1.2
+        assert cfg.active_dim_kl_threshold == pytest.approx(0.01)
 
     def test_config_loads_with_legacy_kl_names(self, tmp_path):
         from VAE_Anime_Config import TrainerConfig
@@ -118,6 +119,15 @@ class TestTrainerConfig:
         assert cfg.initial_kl_weight is None
         assert cfg.max_kl_weight is None
         assert cfg.running_window is None
+
+
+    def test_active_dim_kl_threshold_is_configurable(self, tmp_path):
+        cfg_file = write_config_text(
+            tmp_path,
+            make_config_ini_text(active_dim_kl_threshold="0.025"),
+        )
+        cfg = self.TrainerConfig.from_file(cfg_file)
+        assert cfg.active_dim_kl_threshold == pytest.approx(0.025)
 
     def test_adaptive_kl_fields_have_correct_types(self, tmp_path):
         cfg_file = write_config_text(tmp_path, make_config_ini_text(
