@@ -167,6 +167,72 @@ class VAELossPlotter:
         plt.close(fig)
         return True
 
+    def plot_active_dims_vs_kl_loss(self):
+        """
+        Plot active latent dimensions against KL loss.
+
+        Point color encodes iteration so the scatter plot still shows the
+        training trajectory without forcing a line through non-monotonic x-values.
+        """
+        _, kl_loss, _ = self.get_recon_kl_results()
+        _, _, active_latent_dims = self.get_loss_diagnostic_results()
+        n = min(len(kl_loss), len(active_latent_dims))
+        if n == 0:
+            return False
+
+        iterations = np.arange(n)
+
+        fig, ax = plt.subplots()
+        ax.set_xlabel("Active Latent Dimensions")
+        ax.set_ylabel("KL Loss")
+        ax.set_yscale("log")
+        ax.set_title("Active Latent Dimensions vs KL Loss")
+        scatter = ax.scatter(
+            active_latent_dims[:n],
+            kl_loss[:n],
+            c=iterations,
+            s=4,
+            cmap="viridis",
+        )
+        colorbar = fig.colorbar(scatter, ax=ax)
+        colorbar.set_label("Iteration")
+
+        plt.savefig(self.stats_dir / Path("Active_Dims_vs_KL_Loss.png"))
+        plt.close(fig)
+        return True
+
+    def plot_active_dims_vs_recon_loss(self):
+        """
+        Plot active latent dimensions against reconstruction loss.
+
+        Point color encodes iteration so the scatter plot still shows the
+        training trajectory without forcing a line through non-monotonic x-values.
+        """
+        recon_loss, _, active_latent_dims = self.get_loss_diagnostic_results()
+        n = min(len(recon_loss), len(active_latent_dims))
+        if n == 0:
+            return False
+
+        iterations = np.arange(n)
+
+        fig, ax = plt.subplots()
+        ax.set_xlabel("Active Latent Dimensions")
+        ax.set_ylabel("Recon Loss")
+        ax.set_title("Active Latent Dimensions vs Recon Loss")
+        scatter = ax.scatter(
+            active_latent_dims[:n],
+            recon_loss[:n],
+            c=iterations,
+            s=4,
+            cmap="viridis",
+        )
+        colorbar = fig.colorbar(scatter, ax=ax)
+        colorbar.set_label("Iteration")
+
+        plt.savefig(self.stats_dir / Path("Active_Dims_vs_Recon_Loss.png"))
+        plt.close(fig)
+        return True
+
     def make_diagnostic_graphs(self):
         """
         Create all available diagnostic plots.
@@ -178,4 +244,6 @@ class VAELossPlotter:
             "active_latent_dims": self.plot_active_latent_dims(),
             "kl_per_dim": self.plot_kl_per_dim(),
             "recon_loss_vs_ssim": self.plot_recon_loss_vs_ssim(),
+            "active_dims_vs_kl_loss": self.plot_active_dims_vs_kl_loss(),
+            "active_dims_vs_recon_loss": self.plot_active_dims_vs_recon_loss(),
         }

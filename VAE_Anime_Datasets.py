@@ -195,16 +195,27 @@ class Datasets():
                 "Using a partial final batch."
             )
 
-        # load the training image paths into tensors, create batches and shuffle
+        # Load the training image paths into tensors. Shuffle paths before
+        # decoding/resizing images so a full-split shuffle remains cheap.
+        #
+        # Using the whole training split as the shuffle buffer gives each epoch
+        # a full permutation of the training paths. Since shuffle happens before
+        # batch(), each epoch gets different batch composition/order while still
+        # being reproducible across runs when a seed is supplied.
         train_files = list(map(str, train_paths))
+        effective_shuffle_buffer = max(self.shuffle_buffer, len(train_files))
+
         training_dataset = tf.data.Dataset.from_tensor_slices(train_files)
-        training_dataset = training_dataset.map(map_image, 
-                                                num_parallel_calls=self.num_parallel_calls)
         training_dataset = training_dataset.shuffle(
-            self.shuffle_buffer,
+            effective_shuffle_buffer,
             seed=self.seed,
             reshuffle_each_iteration=self.reshuffle_each_iteration,
-        ).batch(
+        )
+        training_dataset = training_dataset.map(
+            map_image,
+            num_parallel_calls=self.num_parallel_calls,
+        )
+        training_dataset = training_dataset.batch(
             self.batch_size,
             drop_remainder=self.train_drop_remainder,
         ).prefetch(self.prefetch_buffer)
@@ -224,11 +235,12 @@ class Datasets():
         self.validation_dataset = validation_dataset
         self.datasets_made = True
         logging.info(
-            'Dataset mode: strict_reproducibility=%s, num_parallel_calls=%s, prefetch_buffer=%s, reshuffle_each_iteration=%s',
+            'Dataset mode: strict_reproducibility=%s, num_parallel_calls=%s, prefetch_buffer=%s, reshuffle_each_iteration=%s, effective_shuffle_buffer=%s',
             self.strict_reproducibility,
             self.num_parallel_calls,
             self.prefetch_buffer,
             self.reshuffle_each_iteration,
+            effective_shuffle_buffer,
         )
         logging.info(f'number of batches in the training set: {len(training_dataset)}')
         logging.info(f'number of batches in the validation set: {len(validation_dataset)}')
