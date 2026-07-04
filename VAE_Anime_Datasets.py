@@ -42,7 +42,12 @@ class Datasets():
         self.strict_reproducibility = bool(strict_reproducibility)
         self.num_parallel_calls = 1 if self.strict_reproducibility else tf.data.AUTOTUNE
         self.prefetch_buffer = 1 if self.strict_reproducibility else tf.data.AUTOTUNE
-        self.reshuffle_each_iteration = not self.strict_reproducibility
+
+        # Keep epoch-to-epoch training variation even in strict reproducibility
+        # mode. With a fixed seed, TensorFlow's shuffle order is still
+        # reproducible across runs, but reshuffle_each_iteration=True avoids
+        # presenting the exact same batch order/composition every epoch.
+        self.reshuffle_each_iteration = True
 
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
