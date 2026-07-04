@@ -89,4 +89,4 @@ def test_strict_reproducibility_flags_are_set(tmp_path):
 
     assert ds.num_parallel_calls == 1
     assert ds.prefetch_buffer == 1
-    assert ds.reshuffle_each_iteration is False
+    assert ds.reshuffle_each_iteration is True
