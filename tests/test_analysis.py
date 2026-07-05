@@ -65,6 +65,7 @@ class TestAnalyzeResults:
         assert (stats_dir / "Recon_Loss_vs_SSIM.png").exists()
         assert (stats_dir / "Active_Dims_vs_KL_Loss.png").exists()
         assert (stats_dir / "Active_Dims_vs_Recon_Loss.png").exists()
+        assert (stats_dir / "Active_Dims_Recon_KL_3D.html").exists()
         assert (stats_dir / "mu.png").exists()
         assert (stats_dir / "log_var.png").exists()
 

@@ -233,6 +233,90 @@ class VAELossPlotter:
         plt.close(fig)
         return True
 
+
+    def plot_active_dims_recon_kl_3d_html(self):
+        """
+        Create an interactive Plotly 3D scatter plot relating active latent
+        dimensions, reconstruction loss, and KL loss.
+
+        The saved HTML artifact can be opened in a browser, where the viewer can
+        rotate, pan, zoom, and hover over individual points. Point color encodes
+        iteration/training time.
+        """
+        try:
+            import plotly.graph_objects as go
+        except ImportError:
+            return False
+
+        recon_loss, _, active_latent_dims = self.get_loss_diagnostic_results()
+        _, kl_loss, _ = self.get_recon_kl_results()
+
+        n = min(len(active_latent_dims), len(recon_loss), len(kl_loss))
+        if n == 0:
+            return False
+
+        active_arr = np.asarray(active_latent_dims[:n], dtype=float)
+        recon_arr = np.asarray(recon_loss[:n], dtype=float)
+        kl_arr = np.asarray(kl_loss[:n], dtype=float)
+        iterations = np.arange(n)
+
+        finite_mask = (
+            np.isfinite(active_arr)
+            & np.isfinite(recon_arr)
+            & np.isfinite(kl_arr)
+        )
+        if not np.any(finite_mask):
+            return False
+
+        active_arr = active_arr[finite_mask]
+        recon_arr = recon_arr[finite_mask]
+        kl_arr = kl_arr[finite_mask]
+        iterations = iterations[finite_mask]
+
+        zaxis_type = "log" if np.all(kl_arr > 0) else "linear"
+
+        fig = go.Figure(
+            data=[
+                go.Scatter3d(
+                    x=active_arr,
+                    y=recon_arr,
+                    z=kl_arr,
+                    mode="markers",
+                    marker={
+                        "size": 3,
+                        "color": iterations,
+                        "colorscale": "Viridis",
+                        "colorbar": {"title": "Iteration"},
+                    },
+                    customdata=iterations,
+                    hovertemplate=(
+                        "Active dims: %{x}<br>"
+                        "Recon loss: %{y}<br>"
+                        "KL loss: %{z}<br>"
+                        "Iteration: %{customdata}<extra></extra>"
+                    ),
+                )
+            ]
+        )
+
+        fig.update_layout(
+            title="Active Dimensions, Reconstruction Loss, and KL Loss",
+            scene={
+                "xaxis": {"title": "Active Latent Dimensions"},
+                "yaxis": {"title": "Recon Loss"},
+                "zaxis": {"title": "KL Loss", "type": zaxis_type},
+            },
+            margin={"l": 0, "r": 0, "b": 0, "t": 50},
+        )
+
+        fig.write_html(
+            self.stats_dir / Path("Active_Dims_Recon_KL_3D.html"),
+            include_plotlyjs="cdn",
+            full_html=True,
+        )
+        return True
+
+
     def make_diagnostic_graphs(self):
         """
         Create all available diagnostic plots.
@@ -246,4 +330,5 @@ class VAELossPlotter:
             "recon_loss_vs_ssim": self.plot_recon_loss_vs_ssim(),
             "active_dims_vs_kl_loss": self.plot_active_dims_vs_kl_loss(),
             "active_dims_vs_recon_loss": self.plot_active_dims_vs_recon_loss(),
+            "active_dims_recon_kl_3d_html": self.plot_active_dims_recon_kl_3d_html(),
         }
