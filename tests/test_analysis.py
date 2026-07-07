@@ -117,6 +117,8 @@ class TestAnalyzeResults:
         assert result == {
             "active_dims_vs_kl_loss": True,
             "active_dims_vs_recon_loss": True,
+            "active_dims_loss_comparison": True,
         }
         assert (movies_dir / "active_dims_vs_kl_loss.mp4").exists()
         assert (movies_dir / "active_dims_vs_recon_loss.mp4").exists()
+        assert (movies_dir / "active_dims_loss_comparison.mp4").exists()

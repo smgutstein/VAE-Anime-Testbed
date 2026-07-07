@@ -280,6 +280,142 @@ class AnalyzeResults():
         logging.info(f"Saved {outpath}")
         return True
 
+
+    def _make_active_dims_loss_comparison_movie(
+        self,
+        active_dims,
+        recon_loss,
+        kl_loss,
+        movie_name="active_dims_loss_comparison.mp4",
+    ):
+        """
+        Make one side-by-side movie for the active-dimension loss relationships.
+
+        The left panel shows reconstruction loss vs active latent dimensions. The
+        right panel shows KL loss vs active latent dimensions for the same growing
+        set of training points. This keeps both views time-aligned, making it
+        easier to see whether new active dimensions correspond to reconstruction
+        improvements, KL changes, or both.
+        """
+        active_dims = np.asarray(active_dims, dtype=float)
+        recon_loss = np.asarray(recon_loss, dtype=float)
+        kl_loss = np.asarray(kl_loss, dtype=float)
+
+        n = min(len(active_dims), len(recon_loss), len(kl_loss))
+        if n == 0:
+            logging.warning("Skipping active dims loss comparison movie: no points available")
+            return False
+
+        active_dims = active_dims[:n]
+        recon_loss = recon_loss[:n]
+        kl_loss = kl_loss[:n]
+
+        valid_mask = (
+            np.isfinite(active_dims)
+            & np.isfinite(recon_loss)
+            & np.isfinite(kl_loss)
+            & (kl_loss > 0)
+        )
+        if not np.any(valid_mask):
+            logging.warning(
+                "Skipping active dims loss comparison movie: no finite points with positive KL loss"
+            )
+            return False
+
+        active_dims = active_dims[valid_mask]
+        recon_loss = recon_loss[valid_mask]
+        kl_loss = kl_loss[valid_mask]
+        n = len(active_dims)
+
+        skip_pts = int(0.05 * n)
+        active_dims = active_dims[skip_pts:]
+        recon_loss = recon_loss[skip_pts:]
+        kl_loss = kl_loss[skip_pts:]
+        num_points = len(active_dims)
+        if num_points == 0:
+            logging.warning(
+                "Skipping active dims loss comparison movie: no points remain after skipping warmup"
+            )
+            return False
+
+        min_x, max_x = self._axis_limits_from_percentiles(active_dims)
+        min_recon_y, max_recon_y = self._axis_limits_from_percentiles(recon_loss)
+        min_kl_y, max_kl_y = self._axis_limits_from_percentiles(kl_loss)
+
+        frame_len = max(1, int(0.05 * num_points))
+        frame_delta = max(1, int(0.1 * frame_len))
+        num_frames = int((num_points - frame_len) / frame_delta) + 1
+
+        outpath = self.movies_dir / movie_name
+        writer = imageio.get_writer(outpath, fps=5)
+
+        for idx in tqdm(
+            range(num_frames + 1),
+            desc="Making movie for active dims loss comparison",
+        ):
+            stop = min(idx * frame_delta + frame_len, num_points)
+            if stop <= 0:
+                continue
+
+            x_frame = active_dims[:stop]
+            recon_frame = recon_loss[:stop]
+            kl_frame = kl_loss[:stop]
+            colors = np.arange(len(x_frame))
+
+            fig, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
+
+            recon_scatter = axes[0].scatter(
+                x_frame,
+                recon_frame,
+                s=1,
+                c=colors,
+                cmap="cool",
+            )
+            axes[0].set_xlabel("Active Latent Dimensions")
+            axes[0].set_ylabel("Recon Loss")
+            axes[0].set_title("Recon Loss vs Active Latent Dimensions")
+            axes[0].set_xlim([min_x, max_x])
+            axes[0].set_ylim([min_recon_y, max_recon_y])
+            recon_colorbar = fig.colorbar(recon_scatter, ax=axes[0])
+            recon_colorbar.set_label("Pt Number")
+
+            kl_scatter = axes[1].scatter(
+                x_frame,
+                kl_frame,
+                s=1,
+                c=colors,
+                cmap="cool",
+            )
+            axes[1].set_xlabel("Active Latent Dimensions")
+            axes[1].set_ylabel("KL Loss")
+            axes[1].set_title("KL Loss vs Active Latent Dimensions")
+            axes[1].set_xlim([min_x, max_x])
+            axes[1].set_ylim([min_kl_y, max_kl_y])
+            axes[1].set_yscale("log")
+            kl_colorbar = fig.colorbar(kl_scatter, ax=axes[1])
+            kl_colorbar.set_label("Pt Number")
+
+            fig.suptitle("Active Latent Dimensions Loss Relationships")
+
+            canvas = FigureCanvas(fig)
+            canvas.draw()
+            buf = canvas.buffer_rgba()
+            image = Image.frombytes(
+                "RGBA",
+                canvas.get_width_height(),
+                bytes(buf),
+                "raw",
+                "RGBA",
+                0,
+                1,
+            )
+            writer.append_data(np.array(image))
+            plt.close(fig)
+
+        writer.close()
+        logging.info(f"Saved {outpath}")
+        return True
+
     def make_active_dims_relationship_movies(self):
         """
         Make movies for active latent dimensions vs KL/reconstruction loss.
@@ -312,9 +448,16 @@ class AnalyzeResults():
             y_log=False,
         )
 
+        made_comparison = self._make_active_dims_loss_comparison_movie(
+            active_dims,
+            series.recon_loss,
+            series.kl_loss,
+        )
+
         return {
             "active_dims_vs_kl_loss": made_kl,
             "active_dims_vs_recon_loss": made_recon,
+            "active_dims_loss_comparison": made_comparison,
         }
 
     def make_pareto_movie(self):
