@@ -150,7 +150,7 @@ def _read_repo_info(expt_dir: Path) -> dict:
     commit_match = COMMIT_RE.search(notes)
 
     return {
-        "repo_commit": commit_match.group(1)[:6] if commit_match else None,
+        "repo_commit": commit_match.group(1) if commit_match else None,
         "repo_branch": branch_match.group(1) if branch_match else None,
         "repo_dirty": _has_dirty_experiment_code(notes),
     }
