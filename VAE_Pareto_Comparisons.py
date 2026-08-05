@@ -6,9 +6,7 @@ import matplotlib.pyplot as plt
 
 from pathlib import Path
 
-from VAE_Anime_ArtifactReader import ArtifactReader
 from VAE_Anime_Config import TrainerConfig
-from VAE_Anime_ResultsIO import read_loss_file_points_io
 from VAE_ParetoFront import ParetoFront
 
 from utils import get_experiment_dir
@@ -36,17 +34,86 @@ def get_experiment_label(expt_dir, fallback_label=None):
     return expt_dir.name
 
 
-def read_pareto_points(expt_dir):
-    stats_dir = Path(expt_dir) / "stats"
-    reader = ArtifactReader(stats_dir)
+def read_loss_records(expt_dir):
+    """
+    Read chronological loss records from an existing experiment output.
 
-    try:
-        series = reader.read_loss_series()
-        return series.recon_loss, series.kl_loss
-    except Exception:
-        losses_file = resolve_losses_file(expt_dir)
-        _, recon_pts, kl_pts, _ = read_loss_file_points_io(losses_file)
-        return recon_pts, kl_pts
+    ``losses_file.txt`` records epoch and step but not a global iteration.
+    Here, iteration is the zero-based index of each valid output record.
+    """
+    losses_file = resolve_losses_file(expt_dir)
+    records = []
+
+    with losses_file.open("r", encoding="utf-8") as fh:
+        next(fh, None)  # header
+
+        for line_number, line in enumerate(fh, start=2):
+            if "nan" in line.lower() or "inf" in line.lower():
+                continue
+
+            fields = [field.strip() for field in line.split("--")]
+            if len(fields) < 4:
+                print(
+                    f"Warning: ignoring incomplete loss record at "
+                    f"{losses_file}:{line_number}"
+                )
+                continue
+
+            try:
+                epoch = int(fields[0])
+                step = int(fields[1])
+                recon_loss = float(fields[2])
+                kl_loss = float(fields[3])
+            except ValueError:
+                print(
+                    f"Warning: ignoring malformed loss record at "
+                    f"{losses_file}:{line_number}"
+                )
+                continue
+
+            records.append({
+                "iteration": len(records),
+                "epoch": epoch,
+                "step": step,
+                "recon_loss": recon_loss,
+                "kl_loss": kl_loss,
+            })
+
+    if not records:
+        raise ValueError(f"No valid loss records found in {losses_file}")
+
+    return records
+
+
+def pareto_records(records):
+    """
+    Return records on the exact two-objective minimization frontier.
+
+    The frontier definition mirrors ``ParetoFront``: sort by reconstruction
+    loss, keep the lowest KL loss for duplicate reconstruction values, then
+    retain only points that improve the best KL loss seen so far.
+    """
+    ordered = sorted(
+        records,
+        key=lambda record: (record["recon_loss"], record["kl_loss"]),
+    )
+
+    collapsed = []
+    for record in ordered:
+        if collapsed and record["recon_loss"] == collapsed[-1]["recon_loss"]:
+            if record["kl_loss"] < collapsed[-1]["kl_loss"]:
+                collapsed[-1] = record
+        else:
+            collapsed.append(record)
+
+    frontier = []
+    best_kl = np.inf
+    for record in collapsed:
+        if record["kl_loss"] < best_kl:
+            frontier.append(record)
+            best_kl = record["kl_loss"]
+
+    return frontier
 
 
 def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):
@@ -107,14 +174,15 @@ def load_experiments(specs):
         expt_dir = spec["dir"]
         fallback_label = spec["fallback_label"]
 
-        recon_pts, kl_pts = read_pareto_points(expt_dir)
+        records = read_loss_records(expt_dir)
         label = get_experiment_label(expt_dir, fallback_label=fallback_label)
 
         experiments.append({
             "dir": expt_dir,
             "label": label,
-            "recon_pts": recon_pts,
-            "kl_pts": kl_pts,
+            "records": records,
+            "recon_pts": [record["recon_loss"] for record in records],
+            "kl_pts": [record["kl_loss"] for record in records],
         })
 
     return experiments
@@ -178,27 +246,67 @@ def compare_pareto_curves(experiments, output_dir, skip_fraction=0.10):
         raise ValueError("Need at least one experiment to plot")
 
     fig, ax = plt.subplots(figsize=(10, 7), constrained_layout=True)
+    reports = []
 
     for expt in experiments:
-        recon_pts = expt["recon_pts"]
-        kl_pts = expt["kl_pts"]
+        records = expt["records"]
         label = expt["label"]
+        skip_pts = int(skip_fraction * len(records))
+        retained_records = records[skip_pts:]
+        frontier_records = pareto_records(retained_records)
 
-        skip_pts = int(skip_fraction * len(recon_pts))
-
-        p = ParetoFront()
-        p.add_points(recon_pts[skip_pts:], kl_pts[skip_pts:])
-
-        # Use raw frontier, not smoothing, unless you have a good reason not to.
-        pareto_curve = p.get_curve()
-
-        if pareto_curve.size == 0:
+        if not frontier_records:
             print(f"Warning: no Pareto points retained for {label}")
             continue
 
-        ax.plot(pareto_curve[:, 0], pareto_curve[:, 1],
-                linewidth=2, label=label)
+        pareto_curve = np.asarray([
+            [record["recon_loss"], record["kl_loss"]]
+            for record in frontier_records
+        ], dtype=float)
+
+        ax.plot(
+            pareto_curve[:, 0],
+            pareto_curve[:, 1],
+            linewidth=2,
+            label=label,
+        )
         ax.scatter(pareto_curve[:, 0], pareto_curve[:, 1], s=10)
+
+        chronological_points = sorted(
+            frontier_records,
+            key=lambda record: record["iteration"],
+        )
+        last_pareto_point = chronological_points[-1]
+        final_training_point = records[-1]
+
+        reports.append({
+            "experiment": expt["dir"].name,
+            "label": label,
+            "skip_fraction": skip_fraction,
+            "num_training_points": len(records),
+            "num_retained_training_points": len(retained_records),
+            "num_pareto_points": len(chronological_points),
+            "final_training_epoch": final_training_point["epoch"],
+            "final_training_step": final_training_point["step"],
+            "final_training_iteration": final_training_point["iteration"],
+            "last_pareto_epoch": last_pareto_point["epoch"],
+            "last_pareto_step": last_pareto_point["step"],
+            "last_pareto_iteration": last_pareto_point["iteration"],
+            "pareto_training_fraction": (
+                (last_pareto_point["iteration"] + 1) /
+                (final_training_point["iteration"] + 1)
+            ),
+            "last_pareto_point": last_pareto_point,
+            "pareto_points": chronological_points,
+        })
+
+        print(
+            f"{expt['dir'].name}: {len(chronological_points)} Pareto points; "
+            f"last Pareto point at epoch {last_pareto_point['epoch']}, "
+            f"step {last_pareto_point['step']}, "
+            f"iteration {last_pareto_point['iteration']} "
+            f"({reports[-1]['pareto_training_fraction']:.1%} of recorded training)"
+        )
 
     ax.set_xlabel("Recon Loss")
     ax.set_ylabel("KL Loss")
@@ -210,6 +318,14 @@ def compare_pareto_curves(experiments, output_dir, skip_fraction=0.10):
     plt.savefig(outfile, dpi=200)
     plt.close()
     print(f"Saved {outfile}")
+
+    report_file = output_dir / (
+        f"{make_output_stem(experiments, 'ParetoIterations')}.json"
+    )
+    with report_file.open("w", encoding="utf-8") as fh:
+        json.dump(reports, fh, indent=2)
+    print(f"Saved {report_file}")
+
 
 def load_curve(path):
     """
@@ -324,13 +440,16 @@ if __name__ == "__main__":
                         help="Directory for comparison outputs")
     parser.add_argument("--skip_fraction", type=float, default=0.10,
                         help="Fraction of earliest points to skip")
-    parser.add_argument("-c", "--config_file", type=str, nargs="?",
-                        default="config.ini", help="Config file")
+    parser.add_argument(
+        "--parent_dir",
+        type=Path,
+        default=Path("expts"),
+        help="Parent directory containing experiment directories (default: expts)",
+    )
 
     args = parser.parse_args()
 
-    cfg = TrainerConfig.from_file(args.config_file)
-    parent_dir = Path(cfg.parent_dir)
+    parent_dir = args.parent_dir
 
     expt_nums = list(args.expts) if args.expts else []
     expt_dirs = list(args.expt_dirs) if args.expt_dirs else []
