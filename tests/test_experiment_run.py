@@ -17,6 +17,11 @@ def test_experiment_run_create_makes_expected_layout(tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(mod, "get_git_hash", lambda: "fakehash")
+    monkeypatch.setattr(
+        mod,
+        "snapshot_source_state",
+        lambda output_dir: "fake source snapshot",
+    )
 
     run = mod.ExperimentRun.create(cfg)
 
@@ -29,4 +34,5 @@ def test_experiment_run_create_makes_expected_layout(tmp_path, monkeypatch):
     assert (run.output_dir / "config.ini").exists()
     notes = (run.output_dir / "Notes.txt").read_text()
     assert "fakehash" in notes
+    assert "fake source snapshot" in notes
     assert "Loss Policy: adaptive_kl" in notes

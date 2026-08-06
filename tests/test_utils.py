@@ -1,3 +1,5 @@
+import subprocess
+
 import pytest
 
 
@@ -66,3 +68,65 @@ class TestExperimentDirHelpers:
     def test_get_experiment_dir_nonexistent_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             self.get_dir(tmp_path, 99)
+
+
+class TestSourceSnapshot:
+    @staticmethod
+    def _git(repo, *args):
+        subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def test_snapshot_preserves_staged_unstaged_and_untracked_states(self, tmp_path):
+        from utils import snapshot_source_state
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        self._git(repo, "init")
+        self._git(repo, "config", "user.email", "test@example.com")
+        self._git(repo, "config", "user.name", "Test User")
+
+        (repo / ".gitignore").write_text("ignored.txt\nexpts/\n")
+        (repo / "base.py").write_text("base = 1\n")
+        self._git(repo, "add", ".gitignore", "base.py")
+        self._git(repo, "commit", "-m", "baseline")
+
+        # Same file has a staged version and then a later unstaged version.
+        (repo / "base.py").write_text("base = 2\n")
+        self._git(repo, "add", "base.py")
+        (repo / "base.py").write_text("base = 3\n")
+
+        nested = repo / "helpers"
+        nested.mkdir()
+        (nested / "helper.py").write_text("HELPER = True\n")
+        (repo / "ignored.txt").write_text("do not snapshot\n")
+
+        expt_dir = repo / "expts" / "expt_1"
+        expt_dir.mkdir(parents=True)
+
+        notes = snapshot_source_state(expt_dir, repo_dir=repo)
+        snapshot = expt_dir / "source_snapshot"
+
+        assert (snapshot / "staged" / "files" / "base.py").read_text() == "base = 2\n"
+        assert (snapshot / "unstaged" / "files" / "base.py").read_text() == "base = 3\n"
+        assert (snapshot / "untracked" / "files" / "helpers" / "helper.py").read_text() == "HELPER = True\n"
+        assert not (snapshot / "untracked" / "files" / "ignored.txt").exists()
+
+        staged_patch = (snapshot / "staged" / "diff.patch").read_text()
+        unstaged_patch = (snapshot / "unstaged" / "diff.patch").read_text()
+        assert "+base = 2" in staged_patch
+        assert "-base = 2" in unstaged_patch
+        assert "+base = 3" in unstaged_patch
+
+        assert "Staged tracked changes: 1 files" in notes
+        assert "Unstaged tracked changes: 1 files" in notes
+        assert "Untracked, non-ignored files: 1 files" in notes
+        assert "    base.py" in notes
+        assert "    helpers/helper.py" in notes
+        assert "ignored.txt" not in notes

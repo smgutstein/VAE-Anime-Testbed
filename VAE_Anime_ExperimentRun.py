@@ -5,6 +5,7 @@ import shutil
 
 from utils import get_git_hash
 from utils import get_next_experiment_dir
+from utils import snapshot_source_state
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,9 @@ class ExperimentRun:
             hash_str = get_git_hash()
             f.write("Git Hash: \n")
             f.write(hash_str)
-            f.write("\n")
+            f.write("\n\n")
+            f.write(snapshot_source_state(output_dir))
+            f.write("\n\n")
             f.write(f"Loss Policy: {cfg.loss_policy}\n")
             f.write(f"Random Seed: {cfg.seed}\n")
             f.write(f"Deterministic TF Ops: {cfg.deterministic}\n")

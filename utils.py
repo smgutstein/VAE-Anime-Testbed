@@ -3,42 +3,205 @@ import contextlib
 import cProfile
 import logging
 import math
+import shutil
 import subprocess as sp
 import time
 
 from pathlib import Path
 
     
-def get_git_hash():
-    '''Returns git info if available; otherwise returns a safe fallback string.'''
+def _run_git_cmd(args, repo_dir=None, binary=False):
+    """Run a git command and return its output, or None if git is unavailable."""
+    try:
+        output = sp.check_output(
+            ["git", *args],
+            cwd=repo_dir,
+            stderr=sp.DEVNULL,
+        )
+    except Exception:
+        return None
 
-    def run_git_cmd(cmd):
-        try:
-            return sp.check_output(cmd, stderr=sp.DEVNULL).decode("utf-8").strip()
-        except Exception:
-            return None
+    if binary:
+        return output
 
-    # Check if we're inside a git repo
-    inside_repo = run_git_cmd(['git', 'rev-parse', '--is-inside-work-tree'])
+    return output.decode("utf-8", errors="surrogateescape").strip()
 
-    if inside_repo != 'true':
+
+def _git_path_list(args, repo_dir):
+    """Return a null-delimited git path list without breaking on spaces."""
+    output = _run_git_cmd([*args, "-z"], repo_dir=repo_dir, binary=True)
+    if output is None:
+        return []
+
+    return [
+        Path(path.decode("utf-8", errors="surrogateescape"))
+        for path in output.split(b"\0")
+        if path
+    ]
+
+
+def _copy_worktree_files(repo_root, relative_paths, destination_root):
+    for relative_path in relative_paths:
+        source = repo_root / relative_path
+        if not source.exists() and not source.is_symlink():
+            # Deleted tracked files are represented by diff.patch.
+            continue
+
+        destination = destination_root / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination, follow_symlinks=False)
+
+
+def get_git_hash(repo_dir=None):
+    """Return branch and latest commit information, if available."""
+    inside_repo = _run_git_cmd(
+        ["rev-parse", "--is-inside-work-tree"],
+        repo_dir=repo_dir,
+    )
+
+    if inside_repo != "true":
         return "Git info unavailable (not a git repository)."
 
-    branch = run_git_cmd(['git', 'branch', '--show-current']) or "unknown"
-    commit = run_git_cmd(['git', 'log', '-n', '1']) or "unknown"
-    diff = run_git_cmd(['git', 'diff']) or ""
+    branch = _run_git_cmd(["branch", "--show-current"], repo_dir=repo_dir) or "unknown"
+    commit = _run_git_cmd(["log", "-n", "1"], repo_dir=repo_dir) or "unknown"
 
-    output = []
-    output.append(f"Current Branch: {branch}")
-    output.append("")
-    output.append(commit)
+    return "\n".join([
+        f"Current Branch: {branch}",
+        "",
+        commit,
+    ])
 
-    if diff:
-        output.append("")
-        output.append("Uncommitted changes:")
-        output.append(diff)
 
-    return "\n".join(output)
+def snapshot_source_state(experiment_dir, repo_dir=None):
+    """
+    Snapshot repository changes that are not represented by the current commit.
+
+    The snapshot preserves three distinct states:
+      - staged: index versions of staged tracked files + staged diff
+      - unstaged: working-tree versions of unstaged tracked files + unstaged diff
+      - untracked: exact copies of untracked, non-ignored files
+
+    Returns concise text suitable for inclusion in Notes.txt.
+    """
+    experiment_dir = Path(experiment_dir).resolve()
+
+    repo_root_str = _run_git_cmd(
+        ["rev-parse", "--show-toplevel"],
+        repo_dir=repo_dir,
+    )
+    if not repo_root_str:
+        return "Repository state unavailable (not a git repository)."
+
+    repo_root = Path(repo_root_str).resolve()
+    snapshot_root = experiment_dir / "source_snapshot"
+
+    staged_dir = snapshot_root / "staged"
+    unstaged_dir = snapshot_root / "unstaged"
+    untracked_dir = snapshot_root / "untracked"
+
+    staged_files_dir = staged_dir / "files"
+    unstaged_files_dir = unstaged_dir / "files"
+    untracked_files_dir = untracked_dir / "files"
+
+    for directory in (staged_files_dir, unstaged_files_dir, untracked_files_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    staged_patch = _run_git_cmd(
+        ["diff", "--cached", "--binary"],
+        repo_dir=repo_root,
+    ) or ""
+    unstaged_patch = _run_git_cmd(
+        ["diff", "--binary"],
+        repo_dir=repo_root,
+    ) or ""
+
+    (staged_dir / "diff.patch").write_text(
+        staged_patch + ("\n" if staged_patch else ""),
+        encoding="utf-8",
+        errors="surrogateescape",
+    )
+    (unstaged_dir / "diff.patch").write_text(
+        unstaged_patch + ("\n" if unstaged_patch else ""),
+        encoding="utf-8",
+        errors="surrogateescape",
+    )
+
+    staged_paths = _git_path_list(
+        ["diff", "--cached", "--name-only"],
+        repo_root,
+    )
+    staged_copy_paths = _git_path_list(
+        ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+        repo_root,
+    )
+    unstaged_paths = _git_path_list(
+        ["diff", "--name-only"],
+        repo_root,
+    )
+    untracked_paths = _git_path_list(
+        ["ls-files", "--others", "--exclude-standard"],
+        repo_root,
+    )
+
+    # If experiment output is inside the repository and is not ignored, do not
+    # recursively snapshot the experiment directory that we are currently creating.
+    try:
+        experiment_relative = experiment_dir.relative_to(repo_root)
+    except ValueError:
+        experiment_relative = None
+
+    if experiment_relative is not None:
+        untracked_paths = [
+            path for path in untracked_paths
+            if path != experiment_relative and experiment_relative not in path.parents
+        ]
+
+    # A staged file must be copied from Git's index, not from the working tree.
+    # This matters when a file has both staged and unstaged edits.
+    for relative_path in staged_copy_paths:
+        contents = _run_git_cmd(
+            ["show", f":{relative_path.as_posix()}"],
+            repo_dir=repo_root,
+            binary=True,
+        )
+        if contents is None:
+            continue
+
+        destination = staged_files_dir / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(contents)
+
+    _copy_worktree_files(repo_root, unstaged_paths, unstaged_files_dir)
+    _copy_worktree_files(repo_root, untracked_paths, untracked_files_dir)
+
+    lines = [
+        "Repository state at experiment start:",
+        "-------------------------------------",
+        "",
+        f"Staged tracked changes: {len(staged_paths)} files",
+        "Snapshot: source_snapshot/staged/",
+        "Diff:     source_snapshot/staged/diff.patch",
+        "",
+        f"Unstaged tracked changes: {len(unstaged_paths)} files",
+        "Snapshot: source_snapshot/unstaged/",
+        "Diff:     source_snapshot/unstaged/diff.patch",
+        "",
+        f"Untracked, non-ignored files: {len(untracked_paths)} files",
+        "Snapshot: source_snapshot/untracked/",
+    ]
+
+    for heading, paths in (
+        ("Staged files:", staged_paths),
+        ("Unstaged files:", unstaged_paths),
+        ("Untracked files:", untracked_paths),
+    ):
+        lines.extend(["", heading])
+        if paths:
+            lines.extend(f"    {path.as_posix()}" for path in paths)
+        else:
+            lines.append("    (none)")
+
+    return "\n".join(lines)
 
 def timing_decorator(func):
     def wrapper(*args, **kwargs):
