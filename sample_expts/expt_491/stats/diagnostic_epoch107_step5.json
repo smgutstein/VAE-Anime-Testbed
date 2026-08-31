@@ -1,0 +1,18 @@
+{
+  "mu_finite": true,
+  "log_var_finite": true,
+  "sigma_finite": true,
+  "mu_min": -16.972684860229492,
+  "mu_max": 19.27009391784668,
+  "mu_mean": 0.007753544952720404,
+  "log_var_min": -52.73551940917969,
+  "log_var_max": -1.526659607887268,
+  "log_var_mean": -5.864248752593994,
+  "sigma_min": 3.536938103509968e-12,
+  "sigma_max": 0.46611180901527405,
+  "sigma_mean": 0.05912097543478012,
+  "note": "Suspicious finite step saved before divergence",
+  "saved_epoch": 107,
+  "saved_step": 5,
+  "saved_kl_weight": 1.0
+}

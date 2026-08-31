@@ -1,0 +1,37 @@
+Git Hash: 
+Current Branch: main
+
+commit 54ad32c2524d43192d4388546291b46ae7bb3bc4
+Author: Steven Gutstein <s.m.gutstein@gmail.com>
+Date:   Thu Aug 6 18:53:38 2026 -0400
+
+    Improving tracking of files & params used for expts
+
+Repository state at experiment start:
+-------------------------------------
+
+Staged tracked changes: 0 files
+Snapshot: source_snapshot/staged/
+Diff:     source_snapshot/staged/diff.patch
+
+Unstaged tracked changes: 3 files
+Snapshot: source_snapshot/unstaged/
+Diff:     source_snapshot/unstaged/diff.patch
+
+Untracked, non-ignored files: 0 files
+Snapshot: source_snapshot/untracked/
+
+Staged files:
+    (none)
+
+Unstaged files:
+    configs/config_beta_1.ini
+    configs/config_beta_10.ini
+    configs/config_greedy_beta.ini
+
+Untracked files:
+    (none)
+
+Loss Policy: fixed_beta
+Random Seed: 42
+Deterministic TF Ops: False
