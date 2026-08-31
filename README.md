@@ -49,6 +49,8 @@ For each training run, the project extracts the Pareto frontier from the set of 
 In practice, the Pareto frontier is used alongside reconstructed images, generated samples, and latent-origin decodes (`z = 0`) to compare constant-β and adaptive greedy-β VAEs. This helps distinguish regimes that may achieve similar scalar losses but differ in the regions of reconstruction-KL space they explore and in the visual quality of their outputs.
 
 ## Current Results
+Experiments were run at least 5 times with different random seed values for fixed-β VAEs with β = 1, 10, 100, 1000, and the adaptive greedy-β VAE. Generally only 1000 training epochs were used. However, the adaptive greedy-β VAE and β = 1 were allowed to train for 5,000 epochs. Because the fixed-β VAEs showed much less exploration of the loss space, in the interest of time, the other fixed-β VAEs only trained for 1,000 epochs. In general, the fixed-β versions were less sensitive to the initial random seed than the adaptive greedy-β. Although the greedy-β Pareto curves keep the same shape and stay in the same region, only
+
 ### Image Comparisons
 <p align="center">
   <img src="./docs/vae_comparison_grid.png" alt="Image Comparison" width="85%">
@@ -62,37 +64,37 @@ The reconstruction comparison between β = 1000 and adaptive greedy-β slightly 
 
 ### Pareto Comparisons
 <p align="center">
-  <img src="./docs/ParetoCurves2.png" alt="Pareto Curves" width="70%">
+  <img src="./docs/50_ParetoCurves.png" alt="Pareto Curves" width="70%">
 </p>
 
 The VAE objective contains two terms that measure different model behaviors. As a result, performance is better characterized by a curve in two-dimensional loss space than by a single scalar value. Because generated-image quality depends on both reconstruction behavior and latent regularization, Pareto frontiers are used here to summarize the best observed reconstruction-KL tradeoffs for each training regime.
 
-The figure above shows that the constant-β VAEs have relatively short Pareto frontiers that are close to horizontal, with a slight negative slope. As β increases, these frontiers shift down, toward lower KL loss, and to the right, toward higher reconstruction loss. That is consistent with the expected effect of increasing KL pressure.
+The figure above shows 5 sets of 10 Pareto curves with β being held constant at 1,10,100 or 1000, and being allowed to behave in a greedy, adaptive manner. Each set of 10 curves is further divided into two sets of 5 curves with learning rates equal to 0.002 or 0.0002. It can be seen that the constant-β VAEs have Pareto frontiers that are close to horizontal, with a slight negative slope. As β increases, these frontiers shift down, toward lower KL loss, and to the right, toward higher reconstruction loss. That is consistent with the expected effect of increasing KL pressure. In contrast, the adaptive greedy-β run traces out a frontier that appears parabolic and covers a much larger region of loss space than any individual constant-β run. 
 
-In contrast, the adaptive greedy-β run traces out a frontier that appears parabolic and covers a much larger region of loss space than any individual constant-β run. In the two diagrams , the points in loss space visited by the greedy-β run are first shown in the foreground and then shown in the background with respect to the const-β runs. This is done to give a more clear indication of behavior in overlapping regions.
+In the two diagrams below, a more detailed view of the loss trajectories is given by showing all the points in loss space visited during training for 5 different experiments. In the top diagram, the greedy-β run are first shown in the foreground and then shown in the background with respect to the const-β runs. This is done to give a more clear indication of behavior in overlapping regions.
 
 <p align="center">
-  <img src="./docs/LossTrajs_421__expt_422__expt_423__expt_424__expt_425.png" alt="Loss Trajectories" width="70%">
+  <img src="./docs/LossTrajs_expt_483__expt_491__expt_499__expt_510__expt_518.png" alt="Loss Trajectories" width="70%">
 </p>
 
 Across all visited points in two-dimensional loss space, the greedy-β VAE explores a much larger region than the constant-β VAEs. This is both a strength and a weakness: it samples possible VAE configurations more broadly, but it may require more training time to reach the same regions as a fixed-β VAE.
 
-This makes it useful to compare models at, or near, points where their Pareto frontiers intersect. The following 4 images show those intersection-based comparisons:
+This makes it useful to compare models at, or near, points where their Pareto frontiers intersect. The following 4 images show those intersection-based comparisons. It should be noted that the examples shown below are from experiments rhat differ from the ones shown above. Those shown above were chosen to explicitly show fixed-β anf greedy-β intersection points. Those shown below were chosen because they all had the same random seed. This guaranteed that they shared the same 4 constant reconstruction images, which makes for easier comparisons.:
 
 <p align="center">
-  <img src="./docs/row_B1.png" alt="row_B1.png" width="70%">
+  <img src="./docs/row_new_B1a.png" alt="row_B1.png" width="70%">
 </p>
 
 <p align="center">
-  <img src="./docs/row_B10.png" alt="row_B10.png" width="70%">
+  <img src="./docs/row_new_B10a.png" alt="row_B10.png" width="70%">
 </p>
 
 <p align="center">
-  <img src="./docs/row_B100.png" alt="row_B100.png" width="70%">
+  <img src="./docs/row_new_B100a.png" alt="row_B100.png" width="70%">
 </p>
 
 <p align="center">
-  <img src="./docs/row_B1000.png" alt="row_B1000.png" width="70%">
+  <img src="./docs/row_new_B1000a.png" alt="row_B1000.png" width="70%">
 </p>
 
 ### Key observation at curve intersections
@@ -101,7 +103,7 @@ At the intersections between the greedy-β frontier and the β = 1 and β = 10 f
 Additionally, the greedy-β generated images are now showing signs of collapse that were not evident in the earlier comparisons. The main difference between these comparisons and the earlier one is that the earlier one ran for only 1000 epochs. These later comparisons were allowed to run for 5000 epochs and then Pareto curve intersection points were found. This resulted in the greedy-β VAE samples being taken after 3600 - 4900 epochs. It is reasonable to suspect that the extra training contributed to the collapse in generated image quality. One follow-up analysis is to examine how the distributions of `log_var`, $\mu$, and per-dimension KL change with continued training, and how that behavior differs between greedy-β and constant-β VAEs.
 
 ### Effects of learning rate
-The two learning rates examined were 0.002 and 0.0002. The constant-β VAEs for β = 1 and β = 100 showed similar behavior at both values. For β = 10 and β = 1000, stable behavior was only observed at a learning rate of 0.0002. At a learning rate of 0.002, those fixed-β runs were unable to manage the KL term, which blew up.
+The two learning rates examined were 0.002 and 0.0002. The constant-β VAEs for β = 1 and β = 100 showed similar behavior at both values. For β = 10 and β = 1000, stable behavior was only consistently observed at a learning rate of 0.0002. At a learning rate of 0.002, for some initial seed values, those fixed-β runs were unable to manage the KL term, which blew up.
 
 The greedy-β VAE showed the broader exploratory behavior described above at a learning rate of 0.002, but behaved more like a constant-β VAE at a learning rate of 0.0002. This suggests that the adaptive controller may help navigate unstable KL regimes, but it also shows that the controller behavior is strongly coupled to the optimizer learning rate.
 
