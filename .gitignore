@@ -60,8 +60,9 @@ configs/config_beta_5000.ini
 # Scratch files with literal # in filename
 \# Anime VAE Test Bed: Constant-β vs Adap.md
 
-# Optional local helper
+# Optional local helper & deprecated files
 ExptSearcher.py
+VAE_Anime_Pareto_GroupedComparisons.py
 
 # .env files
 *.env
