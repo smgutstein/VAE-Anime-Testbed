@@ -62,7 +62,7 @@ configs/config_beta_5000.ini
 
 # Optional local helper & deprecated files
 ExptSearcher.py
-VAE_Anime_Pareto_GroupedComparisons.py
+VAE_Pareto_GroupedComparisons.py
 
 # .env files
 *.env
