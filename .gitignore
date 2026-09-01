@@ -72,3 +72,7 @@ VAE_Pareto_GroupedComparisons.py
 .ipynb_checkpoints/
 
 old_docs/
+
+archive_unreferenced_docs.py
+docs_checker.py
+ExptTracker.ipynb
