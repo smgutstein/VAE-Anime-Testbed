@@ -242,7 +242,9 @@ class Datasets():
             self.reshuffle_each_iteration,
             effective_shuffle_buffer,
         )
+        logging.info(f'number of images in the training set: {len(train_paths)}')
         logging.info(f'number of batches in the training set: {len(training_dataset)}')
+        logging.info(f'number of images in the validation set: {len(val_paths)}')
         logging.info(f'number of batches in the validation set: {len(validation_dataset)}')
 
     def display_train_data(self, size=9):
