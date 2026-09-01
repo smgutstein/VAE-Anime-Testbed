@@ -1,7 +1,7 @@
 # Anime VAE Test Bed: Constant-β vs Adaptive Greedy-β Training
 
 ## Overview
-This repository is a Variational Autoencoder (VAE) test bed to study how Kullback-Leibler (KL)-weighting strategy affects image reconstruction quality, generation quality, and reconstruction-KL tradeoffs.
+This repository is a Variational Autoencoder (VAE) test bed to study how the Kullback-Leibler (KL)-weighting strategy affects image reconstruction quality, generation quality, and reconstruction-KL tradeoffs.
 
 VAEs optimize two competing objectives: a reconstruction term, which encourages faithful reconstructions, and a Kullback-Leibler (KL) term, which encourages the latent distribution to remain close to a prior. In this project, the raw reconstruction loss is typically much larger than the raw KL term, and the observed training dynamics suggest that without explicit KL upweighting, optimization tends to prioritize reconstruction improvement over latent regularization.
 
@@ -25,7 +25,9 @@ A key question is whether an adaptive KL-weighting strategy can discover better 
 The project currently supports two training modes, which differ in how they manage the relative importance of the reconstruction and KL loss terms. This is done by multiplying the KL loss term by a scalar, β.
 
 ### Constant-β VAE
-Constant-β VAEs use a constant value of β for the entire training run. The larger β is, the more emphasis is placed on reducing the KL loss, typically pushing the model toward stronger latent regularization. The special case β = 1 corresponds to the standard VAE objective.
+Constant-β VAEs use a constant value of β for the entire training run. The larger β is, the more emphasis is placed on reducing the KL loss, typically pushing the model toward stronger latent regularization.
+
+Note on convention: the reconstruction term here is a per-image sum of squared error, while the KL term is averaged over latent dimensions rather than summed. With latent_dim = 512, the β used in this project relates to the conventional β-VAE parameter by β_eff = β / 512. The sweep β ∈ {1, 10, 100, 1000} therefore corresponds to β_eff ∈ {0.002, 0.020, 0.195, 1.95}. Since the reconstruction term also implicitly fixes a decoder observation variance, no single β here corresponds exactly to "the standard VAE objective"; β = 1000 is the closest.
 
 
 Constant-β runs provide the baseline reference points for this project. By training separate models at different fixed values of β, the project measures how static KL weighting changes reconstruction behavior, generation quality, and the shape of the reconstruction-KL Pareto frontier.
@@ -49,13 +51,13 @@ For each training run, the project extracts the Pareto frontier from the set of 
 In practice, the Pareto frontier is used alongside reconstructed images, generated samples, and latent-origin decodes (`z = 0`) to compare constant-β and adaptive greedy-β VAEs. This helps distinguish regimes that may achieve similar scalar losses but differ in the regions of reconstruction-KL space they explore and in the visual quality of their outputs.
 
 ## Current Results
-Experiments were run at least 5 times with different random seed values for fixed-β VAEs with β = 1, 10, 100, 1000, and the adaptive greedy-β VAE. Generally only 1000 training epochs were used. However, the adaptive greedy-β VAE and β = 1 were allowed to train for 5,000 epochs. Because the fixed-β VAEs showed much less exploration of the loss space, in the interest of time, the other fixed-β VAEs only trained for 1,000 epochs. In general, the fixed-β versions were less sensitive to the initial random seed than the adaptive greedy-β. Although the greedy-β Pareto curves keep the same shape and stay in the same region, only
+Experiments were run at least 5 times with different random seed values for fixed-β VAEs with β = 1, 10, 100, 1000, and the adaptive greedy-β VAE. Generally only 1000 training epochs were used. However, the adaptive greedy-β VAE and β = 1 were allowed to train for 5000 epochs. Because the fixed-β VAEs showed much less exploration of the loss space, in the interest of time, the other fixed-β VAEs only trained for 1000 epochs. In general, the fixed-β versions were less sensitive to the initial random seed than the adaptive greedy-β. Although the greedy-β Pareto curves keep the same shape and stay in the same region, only 2 curves at each learning rate achieve reconstruction losses in the range of the β = 1 curves. The 2 greedy-β Pareto curves for a learning rate = 0.0002 intersect the β = 1 curves and dominate them for about 50% of their length. In general, the larger β is for a fixed-β VAE, the more likely a greedy-β VAE will dominate over a larger portion of the fixed-β Pareto curve.
 
 ### Image Comparisons
 <p align="center">
   <img src="./docs/vae_comparison_grid.png" alt="Image Comparison" width="85%">
 </p>
-The figure above compares fixed-β VAEs with β = 1, 10, 100, and 1000 against the adaptive greedy-β VAE after 1,000 training epochs.
+The figure above compares fixed-β VAEs with β = 1, 10, 100, and 1000 against the adaptive greedy-β VAE after 1000 training epochs.
 
 The β = 1 and β = 10 models reconstruct well, but generate poorly. The β = 100 model can produce some of the best individual samples, but its outputs remain inconsistent and occasionally fail badly. The β = 1000 and adaptive greedy-β models produce the strongest generation results overall, with substantially better consistency than the lower-β models.
 
@@ -69,9 +71,9 @@ The reconstruction comparison between β = 1000 and adaptive greedy-β slightly 
 
 The VAE objective contains two terms that measure different model behaviors. As a result, performance is better characterized by a curve in two-dimensional loss space than by a single scalar value. Because generated-image quality depends on both reconstruction behavior and latent regularization, Pareto frontiers are used here to summarize the best observed reconstruction-KL tradeoffs for each training regime.
 
-The figure above shows 5 sets of 10 Pareto curves with β being held constant at 1,10,100 or 1000, and being allowed to behave in a greedy, adaptive manner. Each set of 10 curves is further divided into two sets of 5 curves with learning rates equal to 0.002 or 0.0002. It can be seen that the constant-β VAEs have Pareto frontiers that are close to horizontal, with a slight negative slope. As β increases, these frontiers shift down, toward lower KL loss, and to the right, toward higher reconstruction loss. That is consistent with the expected effect of increasing KL pressure. In contrast, the adaptive greedy-β run traces out a frontier that appears parabolic and covers a much larger region of loss space than any individual constant-β run. 
+The figure above shows 5 sets of 10 Pareto curves. Four of the sets are fixed-β VAEs with β held constant at 1, 10, 100, or 1000. The fifth set is for greedy-β VAEs. Each set of 10 curves is further divided into two sets of 5 curves with learning rates equal to 0.002 or 0.0002. It can be seen that the constant-β VAEs have Pareto frontiers that are close to horizontal, with a slight negative slope. As β increases, these frontiers shift down, toward lower KL loss, and to the right, toward higher reconstruction loss. That is consistent with the expected effect of increasing KL pressure. In contrast, the adaptive greedy-β runs trace out a frontier that appears parabolic and covers a much larger region of loss space than any individual constant-β run. 
 
-In the two diagrams below, a more detailed view of the loss trajectories is given by showing all the points in loss space visited during training for 5 different experiments. In the top diagram, the greedy-β run are first shown in the foreground and then shown in the background with respect to the const-β runs. This is done to give a more clear indication of behavior in overlapping regions.
+In the two diagrams below, a more detailed view of the loss trajectories is given by showing all the points in loss space visited during training for 5 different experiments. In the top diagram, the greedy-β run is shown in the foreground with respect to the const-β runs. In the bottom diagram, their relationship is reversed. This is done to give a more clear indication of behavior in overlapping regions.
 
 <p align="center">
   <img src="./docs/LossTrajs_expt_483__expt_491__expt_499__expt_510__expt_518.png" alt="Loss Trajectories" width="70%">
@@ -79,7 +81,7 @@ In the two diagrams below, a more detailed view of the loss trajectories is give
 
 Across all visited points in two-dimensional loss space, the greedy-β VAE explores a much larger region than the constant-β VAEs. This is both a strength and a weakness: it samples possible VAE configurations more broadly, but it may require more training time to reach the same regions as a fixed-β VAE.
 
-This makes it useful to compare models at, or near, points where their Pareto frontiers intersect. The following 4 images show those intersection-based comparisons. It should be noted that the examples shown below are from experiments rhat differ from the ones shown above. Those shown above were chosen to explicitly show fixed-β anf greedy-β intersection points. Those shown below were chosen because they all had the same random seed. This guaranteed that they shared the same 4 constant reconstruction images, which makes for easier comparisons.:
+This makes it useful to compare models at, or near, points where their Pareto frontiers intersect. The following 4 images show those intersection-based comparisons. It should be noted that the examples shown below are from experiments that differ from the ones shown above. Those shown above were chosen to explicitly show fixed-β and greedy-β intersection points. Those shown below were chosen because they all had the same random seed. This guaranteed that they shared the same 4 constant reconstruction images, which makes for easier comparisons.
 
 <p align="center">
   <img src="./docs/row_new_B1a.png" alt="row_B1.png" width="70%">
@@ -98,14 +100,12 @@ This makes it useful to compare models at, or near, points where their Pareto fr
 </p>
 
 ### Key observation at curve intersections
-At the intersections between the greedy-β frontier and the β = 1 and β = 10 frontiers, reconstruction quality is similar, but the greedy-β model produces visibly better generated samples in these examples. This suggests that the two scalar loss terms do not fully explain generation quality, or that their relationship to generation quality is mediated by additional latent-distribution behavior. 
+At the intersections between the greedy-β frontier and the β = 1 and β = 10 frontiers, reconstruction quality is similar, but the greedy-β model produces visibly better generated samples in these examples. This suggests that the two scalar loss terms do not fully explain generation quality, or that their relationship to generation quality is mediated by additional latent-distribution behavior. It also suggests that these Pareto curves (and by implication the loss term being optimized) are not perfectly matched to our desired task, given that part of a VAE's purpose is to generate images.
 
-Additionally, the greedy-β generated images are now showing signs of collapse that were not evident in the earlier comparisons. The main difference between these comparisons and the earlier one is that the earlier one ran for only 1000 epochs. These later comparisons were allowed to run for 5000 epochs and then Pareto curve intersection points were found. This resulted in the greedy-β VAE samples being taken after 3600 - 4900 epochs. It is reasonable to suspect that the extra training contributed to the collapse in generated image quality. One follow-up analysis is to examine how the distributions of `log_var`, $\mu$, and per-dimension KL change with continued training, and how that behavior differs between greedy-β and constant-β VAEs.
+Additionally, the greedy-β generated images are now showing signs of collapse that were not evident in the earlier comparisons. The main difference between these comparisons and the earlier one is that the earlier one ran for only 1000 epochs. These later comparisons were allowed to run for 5000 epochs and then Pareto curve intersection points were found. This resulted in the greedy-β VAE samples being taken after 3600 to 4900 epochs. It is reasonable to suspect that the extra training contributed to the collapse in generated image quality. One follow-up analysis is to examine how the distributions of `log_var`, $\mu$, and per-dimension KL change with continued training, and how that behavior differs between greedy-β and constant-β VAEs.
 
 ### Effects of learning rate
 The two learning rates examined were 0.002 and 0.0002. The constant-β VAEs for β = 1 and β = 100 showed similar behavior at both values. For β = 10 and β = 1000, stable behavior was only consistently observed at a learning rate of 0.0002. At a learning rate of 0.002, for some initial seed values, those fixed-β runs were unable to manage the KL term, which blew up.
-
-The greedy-β VAE showed the broader exploratory behavior described above at a learning rate of 0.002, but behaved more like a constant-β VAE at a learning rate of 0.0002. This suggests that the adaptive controller may help navigate unstable KL regimes, but it also shows that the controller behavior is strongly coupled to the optimizer learning rate.
 
 ## Quick Start
 
@@ -142,19 +142,26 @@ Before training, open a config file in `configs/` and update any machine-specifi
 - image size
 - number of epochs
 - loss policy
-- β / KL-weighting settings (Note: KL-weighting acts the same way as β. In future versions, only the term β will be used)
+- β / KL-weighting settings (Note: KL-weighting acts the same way as β. In future versions, only the term β will be used.)
 
 The project supports both fixed-β and adaptive KL-weighting experiments through config-driven settings. The `configs/` directory includes fixed-β examples for β = 1, 10, 100, and 1000, plus an adaptive greedy-β configuration.
 
-### 4. Run a constant-β baseline
-Launch a baseline experiment with a fixed value of β:
+### 4. Run a quick test for constant-β baseline
+Perform short experiment to verify code runs:
 
 ```bash
 python VAE_Anime_Train.py --config_file config_smoke_tester.ini
 ```
-Note: `config_smoke_tester.ini` is the quick smoke-test config. It trains for only 5 epochs and is intended to verify that the pipeline runs end-to-end.
+`config_smoke_tester.ini` is the quick smoke-test config. It trains for only 5 epochs and is intended to verify that the pipeline runs end-to-end. 
 
-### 5. Run an adaptive greedy-β experiment
+### 5. Run a constant-β baseline
+Launch a baseline experiment with a fixed value of β:
+
+```bash
+python VAE_Anime_Train.py --config_file config_beta_1.ini
+```
+
+### 6. Run an adaptive greedy-β experiment
 Launch an experiment using the adaptive controller:
 
 ```bash
@@ -164,15 +171,15 @@ python VAE_Anime_Train.py --config_file config_greedy_beta.ini
 
 The README figures compare β = 1, 10, 100, and 1000 against the adaptive greedy-β run. Matching sample configs are provided in `configs/`.
 
-### 6. Review the output artifacts
+### 7. Review the output artifacts
 Each run is assigned an experiment number and writes outputs under `expts/expt_<experiment number>/`.
 
 The main artifact subdirectories are:
-- `model_info/` — encoder, decoder, and full VAE architecture summaries
-- `raw_images/` — per-epoch image grids showing inputs, reconstructions, latent-origin decodes (`z = 0`), and random generations
-- `movies/` — training movies for image evolution and reconstruction-KL dynamics
-- `stats/` — Pareto-frontier plots, reconstruction-KL scatter plots, and other diagnostics
-- `original_images/` — saved source images used for comparison
+- `model_info/`: encoder, decoder, and full VAE architecture summaries
+- `raw_images/`: per-epoch image grids showing inputs, reconstructions, latent-origin decodes (`z = 0`), and random generations
+- `movies/`: training movies for image evolution and reconstruction-KL dynamics
+- `stats/`: Pareto-frontier plots, reconstruction-KL scatter plots, and other diagnostics
+- `original_images/`: saved source images used for comparison
 
 In the per-epoch image grids:
 - row 1 shows input images
@@ -182,7 +189,7 @@ In the per-epoch image grids:
 
 The first 4 columns track the same inputs or latent samples across epochs, while the last 4 columns are randomly refreshed.
 
-### 7. Compare fixed-β and adaptive runs
+### 8. Compare fixed-β and adaptive runs
 After running both modes, compare them using:
 - reconstruction quality
 - generated image quality
@@ -197,40 +204,42 @@ The repository also includes analysis utilities for extracting and plotting Pare
 The repository is organized around a config-driven VAE training pipeline, with separate modules for model definition, training control, artifact generation, and downstream analysis.
 
 ### Core Training
-- `VAE_Anime_Train.py` — main training entry point
-- `VAE_Anime_ExperimentRun.py` — experiment-directory setup and run bookkeeping
-- `VAE_Anime_Config.py` — config parsing and validation
-- `VAE_Anime_Datasets.py` — dataset loading, preprocessing, and reproducibility controls
+- `VAE_Anime_Train.py`: main training entry point
+- `VAE_Anime_ExperimentRun.py`: experiment-directory setup and run bookkeeping
+- `VAE_Anime_Config.py`: config parsing and validation
+- `VAE_Anime_Datasets.py`: dataset loading, preprocessing, and reproducibility controls
 
 ### Model Components
-- `VAE_Anime_Encoder.py` — encoder definition
-- `VAE_Anime_Decoder.py` — decoder definition
-- `VAE_Anime_Full_Model.py` — full VAE assembly
+- `VAE_Anime_Encoder.py`: encoder definition
+- `VAE_Anime_Decoder.py`: decoder definition
+- `VAE_Anime_Full_Model.py`: full VAE assembly
 
 ### Loss, Control, and Training Safety
-- `VAE_Anime_LossPolicy.py` — fixed-β and adaptive KL-weighting logic
-- `VAE_Anime_KL_Weight_Scheduler.py` — KL-weight scheduling utilities
-- `VAE_Anime_StepGuard.py` — safeguards against unstable training steps
-- `VAE_Anime_Training_Monitor.py` — training-time metric tracking and monitoring
+- `VAE_Anime_LossPolicy.py`: fixed-β and adaptive KL-weighting logic
+- `VAE_Anime_KL_Weight_Scheduler.py`: KL-weight scheduling utilities
+- `VAE_Anime_StepGuard.py`: safeguards against unstable training steps
+- `VAE_Anime_Training_Monitor.py`: training-time metric tracking and monitoring
 
 ### Artifacts and Visualization
-- `VAE_Anime_Snapshotter.py` — per-epoch image snapshots
-- `VAE_Anime_MovieBuilder.py` — training movies
-- `VAE_Anime_ArtifactWriter.py` / `VAE_Anime_ArtifactReader.py` — structured artifact I/O
-- `VAE_Anime_RunArtifacts.py` / `VAE_Anime_Artifacts.py` / `VAE_Anime_ResultsIO.py` — run outputs and saved results management
+- `VAE_Anime_Snapshotter.py`: per-epoch image snapshots
+- `VAE_Anime_MovieBuilder.py`: training movies
+- `VAE_Anime_ArtifactWriter.py` / `VAE_Anime_ArtifactReader.py`: structured artifact I/O
+- `VAE_Anime_RunArtifacts.py` / `VAE_Anime_Artifacts.py` / `VAE_Anime_ResultsIO.py`: run outputs and saved results management
 
 ### Analysis
-- `VAE_Anime_Analysis.py` — post-run analysis utilities
-- `VAE_ParetoFront.py` — Pareto-frontier extraction
-- `VAE_Pareto_Comparisons.py` — comparison of frontiers across runs
-- `VAE_Anime_LossPlotter.py` — loss-space plots
-- `VAE_Anime_LatentStatsPlotter.py` — latent-space diagnostics
+- `VAE_Anime_Analysis.py`: post-run analysis utilities
+- `VAE_ParetoFront.py`: Pareto-frontier extraction
+- `VAE_Pareto_Comparisons.py`: comparison of frontiers across runs
+- `VAE_Anime_LossPlotter.py`: loss-space plots
+- `VAE_Anime_LatentStatsPlotter.py`: latent-space diagnostics
+- `VAE_Pareto_GroupedComparisons_beta_lr.py`: Allows comparison of several Pareto curves on single graph. Assigns same color to curves generated by experiments with same learning rate and loss policy (i.e. either greedy-β or same value of β for fixed-β policy)
+- `VAE_Pareto_Front_Intersections.py`: Determines epochs corresponding to closest points of two Pareto curves
 
 ## Training Stability and StepGuard Trip-Wire Logic
 
 The training loop includes a defensive `StepGuard` mechanism designed to prevent numerically unstable updates from corrupting a run. During VAE training, especially when β is large or changing dynamically, the KL term and latent variance parameters can occasionally spike. In earlier experiments, these spikes produced pathological updates, including extreme `log_var` values and KL explosions.
 
-`StepGuard` acts as a trip-wire around each proposed optimization step. It checks for signs of instability such as non-finite losses, excessive KL jumps, and unsafe latent variance values. When a proposed step appears dangerous, the update can be skipped, the learning rate can be reduced, and diagnostic artifacts can be saved for later inspection. If the trip-wire activates too many consecutive times, as controlled by `max_consecutive_tripwire`, the experiment stops gracefully before corrupting the run.
+`StepGuard` acts as a trip-wire around each proposed optimization step. It checks for signs of instability such as non-finite losses, excessive KL jumps, and unsafe latent variance values. When a proposed step appears dangerous, the update can be skipped, the learning rate can be reduced, and diagnostic artifacts can be saved for later inspection. If the trip-wire activates too many consecutive times, as controlled by `max_consecutive_tripwires`, the experiment stops gracefully before corrupting the run.
 
 This means the project does not rely only on post-hoc failure analysis. It includes active training-time safeguards that attempt to preserve the last good model state while still recording enough information to understand what went wrong.
 
@@ -238,7 +247,7 @@ This logic is especially important for the adaptive greedy-β experiments, becau
 
 
 ### Testing
-- `tests/` — unit, smoke, and reproducibility tests covering training, config parsing, artifact handling, analysis, and stability checks
+- `tests/`: unit, smoke, and reproducibility tests covering training, config parsing, artifact handling, analysis, and stability checks
 
 The test suite is intended to be run from the project environment. In this environment, all tests should pass:
 
@@ -247,7 +256,7 @@ python -m pytest -q tests
 ```
 
 ### Environment
-- `environment-gpu.yml` — reproducible Conda environment for running experiments
+- `environment-gpu.yml`: reproducible Conda environment for running experiments
 
 ### Reproducibility
 
@@ -271,7 +280,9 @@ At a high level, the included samples cover:
 - adaptive greedy-β runs used in the main README comparisons
 - text outputs from the corresponding `stats/` directories, including loss traces and Pareto-related outputs where available
 
-For the first set of image comparisons, the relevant `sample_expts/` sub-directories are `expt_409`, `expt_407`, `expt_410`, `expt_408` and `expt_390` for the constant-β = 1, 10, 100, 1000 and the greedy-β VAEs, respectively. For the second set of comparisons, the relevant `sample_expts/` sub-directories are `expt_424`, `expt_423`, `expt_422`, `expt_425` and `expt_421` for the constant-β = 1, 10, 100, 1000 and the greedy-β VAEs, respectively.
+For the first set of image comparisons, the relevant `sample_expts/` sub-directories are `expt_409`, `expt_407`, `expt_410`, `expt_408` and `expt_390` for the constant-β = 1, 10, 100, 1000 and the greedy-β VAEs, respectively. For the second set of comparisons, the relevant `sample_expts/` sub-directories are `expt_424`, `expt_423`, `expt_422`, `expt_425` and `expt_421` for the constant-β = 1, 10, 100, 1000, and the greedy-β VAEs, respectively.
+
+The Pareto comparisons were made with a set of 50 experiments, of which a representative 5 are stored in sample_expts. They are `expt_483` for greedy-β and for fixed-β `expt_491`, `expt_499`, `expt_510`, and `expt_518` for constant-β = 1, 10, 100, 1000, respectively.
 
 
 ## Limitations
@@ -284,6 +295,7 @@ This repository is best understood as an experimental framework for studying VAE
 - The observed behavior is **sensitive to training setup**, including learning rate and other hyperparameters.
 - The Pareto frontiers are **empirical summaries of observed runs**, not guarantees of globally optimal tradeoffs.
 - The codebase emphasizes **experimentation and diagnostics** more than packaging, ease of installation, or production readiness.
+- The Reconstruction-KL loss curve does not fully determine generation quality, as the intersection comparisons show.
 
 In other words, the project is currently stronger as a controlled experimental test bed than as a polished end-user tool.
 
@@ -291,17 +303,17 @@ In other words, the project is currently stronger as a controlled experimental t
 ## Next Steps
 1. Continue refactoring the training pipeline. `VAE_Anime_Train.py` can be broken down further, and older internal terminology such as “KL factor” should be standardized to β.
 
-2. Expand controller diagnostics in `losses.txt` so each adaptive β decision can be traced from the recorded training state.
+2. Expand controller diagnostics in `losses_file.txt` so each adaptive β decision can be traced from the recorded training state.
 
-3. Add better image metrics
-    - Structural Similarity Metric (SSIM) for reconstruction quality
-    - Fréchet Inception Distance (FID) and/or Kernel Inception Distance (KID) for generated image quality
+3. Add better image metrics:
+    - Structural Similarity Index Measure (SSIM) for reconstruction quality.
+    - Fréchet Inception Distance (FID) and/or Kernel Inception Distance (KID) for generated image quality.
 
-4. More closely monitor the distributions of μ and log σ to track image compression and more quickly spot signs of collapse
+4. More closely monitor the distributions of μ and $\log \sigma^2$ to track image compression and more quickly spot signs of collapse.
 
 5. Implement additional β-control strategies:
-   a. GECO-like policy.
-   b. ControlVAE/capacity-target policy.
+   - GECO-like policy.
+   - ControlVAE/capacity-target policy.
 
 ## License
 
@@ -309,4 +321,4 @@ This project is released under the MIT License. See [LICENSE.md](LICENSE.md).
 
 ## Anime Faces Dataset
 
-The training data is downloaded from the DeepLearning.AI/Coursera-hosted `anime-faces.zip` mirror. The associated Coursera VAE assignment identifies it as the anime faces dataset by MckInsey666. The precise provenance and redistribution license of this hosted ZIP should be treated cautiously, so this repository does not redistribute the image dataset.
+The training data is downloaded from the DeepLearning.AI/Coursera-hosted `anime-faces.zip` mirror. The associated Coursera VAE assignment identifies it as the anime faces dataset by Mckinsey666. The precise provenance and redistribution license of this hosted ZIP should be treated cautiously, so this repository does not redistribute the image dataset.
