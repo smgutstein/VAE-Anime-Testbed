@@ -11,6 +11,10 @@ from typing import Iterable
 import numpy as np
 
 from utils import get_experiment_dir
+from VAE_Loss_Records import (
+    read_loss_records as shared_read_loss_records,
+    pareto_records as shared_pareto_records,
+)
 
 
 DEFAULT_COMPLETION_PERCENTAGES = (50, 75, 80, 90, 95, 99, 100)
@@ -20,72 +24,13 @@ TEXT_OUTPUT_FILE_NAME = "pareto_run_summary.txt"
 
 
 def read_loss_records(loss_file: Path) -> list[dict]:
-    """Read finite loss records while retaining epoch, step, and output iteration."""
-    loss_file = Path(loss_file)
-    if not loss_file.is_file():
-        raise FileNotFoundError(f"Loss file does not exist: {loss_file}")
-
-    records = []
-    with loss_file.open("r", encoding="utf-8") as fh:
-        next(fh, None)  # header
-
-        for iteration, line in enumerate(fh):
-            fields = [part.strip() for part in line.split("--")]
-            if len(fields) < 4:
-                continue
-
-            try:
-                epoch = int(fields[0])
-                step = int(fields[1])
-                recon_loss = float(fields[2])
-                kl_loss = float(fields[3])
-            except ValueError:
-                continue
-
-            if not np.isfinite(recon_loss) or not np.isfinite(kl_loss):
-                continue
-
-            records.append({
-                "epoch": epoch,
-                "step": step,
-                "iteration": iteration,
-                "recon_loss": recon_loss,
-                "kl_loss": kl_loss,
-            })
-
-    if not records:
-        raise ValueError(f"No finite loss records found in {loss_file}")
-
-    return records
+    """Read finite loss records while retaining epoch, step, and iteration."""
+    return shared_read_loss_records(loss_file)
 
 
 def find_pareto_records(records: Iterable[dict]) -> list[dict]:
-    """Return the exact two-objective minimization frontier ordered by recon loss."""
-    ordered = sorted(
-        records,
-        key=lambda record: (
-            record["recon_loss"],
-            record["kl_loss"],
-            record["iteration"],
-        ),
-    )
-
-    # Match ParetoFront exact-mode behavior: for equal reconstruction loss,
-    # retain the lowest-KL record, then keep strict improvements in KL.
-    collapsed = []
-    for record in ordered:
-        if collapsed and record["recon_loss"] == collapsed[-1]["recon_loss"]:
-            if record["kl_loss"] < collapsed[-1]["kl_loss"]:
-                collapsed[-1] = record
-            continue
-        collapsed.append(record)
-
-    frontier = []
-    best_kl = math.inf
-    for record in collapsed:
-        if record["kl_loss"] < best_kl:
-            frontier.append(dict(record))
-            best_kl = record["kl_loss"]
+    """Return the exact frontier ordered by recon loss, with rank fields."""
+    frontier = [dict(record) for record in shared_pareto_records(records)]
 
     for recon_rank, record in enumerate(frontier, start=1):
         record["pareto_rank_by_recon"] = recon_rank

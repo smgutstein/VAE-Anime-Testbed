@@ -43,87 +43,17 @@ SNAPSHOT_RE = re.compile(
     r"^image_at_epoch_(?P<epoch>\d+)_step(?P<step>\d+)\.png$"
 )
 
+from VAE_Loss_Records import (
+    read_loss_records as shared_read_loss_records,
+    pareto_records,
+)
+
 EPS = 1e-12
 
 
 def read_loss_records(expt_dir: Path) -> list[dict]:
-    loss_file = expt_dir / "stats" / "losses_file.txt"
-    if not loss_file.is_file():
-        raise FileNotFoundError(f"Loss file does not exist: {loss_file}")
-
-    records = []
-
-    with loss_file.open("r", encoding="utf-8") as fh:
-        next(fh, None)
-
-        for line_number, line in enumerate(fh, start=2):
-            fields = [field.strip() for field in line.split("--")]
-            if len(fields) < 4:
-                continue
-
-            try:
-                epoch = int(fields[0])
-                step = int(fields[1])
-                recon_loss = float(fields[2])
-                kl_loss = float(fields[3])
-            except ValueError:
-                print(
-                    f"Warning: ignoring malformed loss record at "
-                    f"{loss_file}:{line_number}"
-                )
-                continue
-
-            if not (
-                math.isfinite(recon_loss)
-                and math.isfinite(kl_loss)
-                and kl_loss > 0.0
-            ):
-                continue
-
-            records.append({
-                "iteration": len(records),
-                "epoch": epoch,
-                "step": step,
-                "recon_loss": recon_loss,
-                "kl_loss": kl_loss,
-            })
-
-    if not records:
-        raise ValueError(f"No valid positive-KL loss records found in {loss_file}")
-
-    return records
-
-
-def pareto_records(records: list[dict]) -> list[dict]:
-    """
-    Exact two-objective minimization frontier, matching the logic used by
-    VAE_Pareto_Comparisons.py.
-    """
-    ordered = sorted(
-        records,
-        key=lambda record: (record["recon_loss"], record["kl_loss"]),
-    )
-
-    collapsed = []
-    for record in ordered:
-        if collapsed and record["recon_loss"] == collapsed[-1]["recon_loss"]:
-            if record["kl_loss"] < collapsed[-1]["kl_loss"]:
-                collapsed[-1] = record
-        else:
-            collapsed.append(record)
-
-    frontier = []
-    best_kl = float("inf")
-
-    for record in collapsed:
-        if record["kl_loss"] < best_kl:
-            frontier.append(record)
-            best_kl = record["kl_loss"]
-
-    if len(frontier) < 2:
-        raise ValueError("Pareto frontier must contain at least two points")
-
-    return frontier
+    """Read chronological loss records for an experiment directory."""
+    return shared_read_loss_records(expt_dir)
 
 
 def retained_pareto_records(
@@ -140,7 +70,15 @@ def retained_pareto_records(
             f"skip_fraction={skip_fraction}"
         )
 
-    return pareto_records(retained)
+    frontier = pareto_records(retained)
+
+    if len(frontier) < 2:
+        raise ValueError(
+            f"{expt_dir.name}: Pareto frontier must contain at least "
+            f"two points"
+        )
+
+    return frontier
 
 
 def find_snapshots(expt_dir: Path) -> dict[tuple[int, int], Path]:

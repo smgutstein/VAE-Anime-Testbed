@@ -8,6 +8,10 @@ from pathlib import Path
 
 from VAE_Anime_Config import TrainerConfig
 from VAE_ParetoFront import ParetoFront
+from VAE_Loss_Records import (
+    read_loss_records as shared_read_loss_records,
+    pareto_records,
+)
 
 from utils import get_experiment_dir
 
@@ -35,85 +39,8 @@ def get_experiment_label(expt_dir, fallback_label=None):
 
 
 def read_loss_records(expt_dir):
-    """
-    Read chronological loss records from an existing experiment output.
-
-    ``losses_file.txt`` records epoch and step but not a global iteration.
-    Here, iteration is the zero-based index of each valid output record.
-    """
-    losses_file = resolve_losses_file(expt_dir)
-    records = []
-
-    with losses_file.open("r", encoding="utf-8") as fh:
-        next(fh, None)  # header
-
-        for line_number, line in enumerate(fh, start=2):
-            if "nan" in line.lower() or "inf" in line.lower():
-                continue
-
-            fields = [field.strip() for field in line.split("--")]
-            if len(fields) < 4:
-                print(
-                    f"Warning: ignoring incomplete loss record at "
-                    f"{losses_file}:{line_number}"
-                )
-                continue
-
-            try:
-                epoch = int(fields[0])
-                step = int(fields[1])
-                recon_loss = float(fields[2])
-                kl_loss = float(fields[3])
-            except ValueError:
-                print(
-                    f"Warning: ignoring malformed loss record at "
-                    f"{losses_file}:{line_number}"
-                )
-                continue
-
-            records.append({
-                "iteration": len(records),
-                "epoch": epoch,
-                "step": step,
-                "recon_loss": recon_loss,
-                "kl_loss": kl_loss,
-            })
-
-    if not records:
-        raise ValueError(f"No valid loss records found in {losses_file}")
-
-    return records
-
-
-def pareto_records(records):
-    """
-    Return records on the exact two-objective minimization frontier.
-
-    The frontier definition mirrors ``ParetoFront``: sort by reconstruction
-    loss, keep the lowest KL loss for duplicate reconstruction values, then
-    retain only points that improve the best KL loss seen so far.
-    """
-    ordered = sorted(
-        records,
-        key=lambda record: (record["recon_loss"], record["kl_loss"]),
-    )
-
-    collapsed = []
-    for record in ordered:
-        if collapsed and record["recon_loss"] == collapsed[-1]["recon_loss"]:
-            if record["kl_loss"] < collapsed[-1]["kl_loss"]:
-                collapsed[-1] = record
-        else:
-            collapsed.append(record)
-
-    frontier = []
-    best_kl = np.inf
-    for record in collapsed:
-        if record["kl_loss"] < best_kl:
-            frontier.append(record)
-            best_kl = record["kl_loss"]
-
-    return frontier
+    """Read chronological loss records for an experiment directory."""
+    return shared_read_loss_records(resolve_losses_file(expt_dir))
 
 
 def resolve_experiment_dir(parent_dir, expt_num=None, expt_dir=None):

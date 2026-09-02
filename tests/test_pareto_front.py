@@ -5,10 +5,11 @@ Two concerns are covered here:
 
 1. ``ParetoFront`` itself -- the exact and epsilon-tolerant frontier used to
    build ParetoPoints.txt.
-2. Agreement between the four separate frontier implementations in the repo.
-   ``ParetoFront.add_points`` and the three ``pareto_records`` copies are
-   independent code paths that are documented as computing the same thing,
-   so they are pinned against each other here.
+2. Agreement between the five separate frontier implementations in the repo.
+   ``ParetoFront.add_points``, the three ``pareto_records`` copies, and
+   ``ParetoRunSummary.find_pareto_records`` are independent code paths that
+   are documented as computing the same thing, so they are pinned against
+   each other here.
 """
 
 import math
@@ -205,15 +206,16 @@ class TestParetoFrontDocumentedQuirks:
 
 class TestFrontierImplementationsAgree:
     """
-    Four independent frontier implementations exist:
+    Five independent frontier implementations exist:
 
         VAE_ParetoFront.ParetoFront.add_points
         VAE_Pareto_Comparisons.pareto_records
         VAE_Pareto_Front_Intersections.pareto_records
         VAE_Pareto_GroupedComparisons_beta_lr.pareto_records
+        VAE_Anime_ParetoRunSummary.find_pareto_records
 
-    The three ``pareto_records`` copies carry docstrings saying they mirror
-    each other and ``ParetoFront``. This pins that claim.
+    All four function copies carry docstrings saying they mirror
+    ``ParetoFront``. This pins that claim.
     """
 
     @pytest.fixture(autouse=True)
@@ -224,17 +226,26 @@ class TestFrontierImplementationsAgree:
         from VAE_Pareto_GroupedComparisons_beta_lr import (
             pareto_records as pr_grouped,
         )
+        from VAE_Anime_ParetoRunSummary import find_pareto_records as pr_summary
+        from VAE_Loss_Records import pareto_records as pr_shared
 
         self.ParetoFront = ParetoFront
         self.record_impls = {
             "comparisons": pr_comparisons,
             "intersections": pr_intersections,
             "grouped": pr_grouped,
+            "run_summary": pr_summary,
+            "shared": pr_shared,
         }
 
     @staticmethod
     def _records(points):
-        return [{"recon_loss": x, "kl_loss": y} for x, y in points]
+        # find_pareto_records also sorts on "iteration", so it is supplied
+        # here. The other three implementations ignore it.
+        return [
+            {"recon_loss": x, "kl_loss": y, "iteration": i}
+            for i, (x, y) in enumerate(points)
+        ]
 
     @staticmethod
     def _as_pairs(records):
@@ -248,7 +259,7 @@ class TestFrontierImplementationsAgree:
         ]
 
     @pytest.mark.parametrize("seed", [0, 1, 2, 3, 4])
-    def test_all_three_record_impls_agree(self, seed):
+    def test_all_four_record_impls_agree(self, seed):
         points = self._random_points(seed)
         records = self._records(points)
 
@@ -280,16 +291,17 @@ class TestFrontierImplementationsAgree:
         assert all(r == results[0] for r in results)
         assert results[0] == [(1.0, 2.0), (3.0, 1.0)]
 
-    def test_intersections_copy_rejects_short_frontiers(self):
+    def test_short_frontiers_are_returned_not_rejected(self):
         """
-        The Front_Intersections copy is the one documented divergence: it
-        raises when the frontier has fewer than two points, while the other
-        two return the short frontier.
+        All entry points return a short frontier. The two-point requirement
+        is enforced by retained_pareto_records, closer to where it matters.
         """
         records = self._records([(1.0, 1.0), (2.0, 5.0), (3.0, 9.0)])
 
         assert len(self.record_impls["comparisons"](records)) == 1
         assert len(self.record_impls["grouped"](records)) == 1
-
-        with pytest.raises(ValueError):
-            self.record_impls["intersections"](records)
+        assert len(self.record_impls["run_summary"](records)) == 1
+        assert len(self.record_impls["shared"](records)) == 1
+        # The short-frontier guard now lives in retained_pareto_records,
+        # not in the frontier function itself.
+        assert len(self.record_impls["intersections"](records)) == 1
