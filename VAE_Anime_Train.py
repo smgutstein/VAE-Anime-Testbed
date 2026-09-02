@@ -164,6 +164,7 @@ class VAE_Trainer:
                     self.beta_factor.assign(self.loss_policy.current_value())
                     curr_kl_weight_before_update = float(self.loss_policy.current_value())
 
+                    # Take gradient descent step
                     raw_step_output = train_step(
                         x_batch_train,
                         self.beta_factor,
@@ -173,6 +174,7 @@ class VAE_Trainer:
                         self.optimizer,
                     )
 
+                    # Create tuple with all results of grad descent step
                     step_result = build_step_result(
                         raw_step_output=raw_step_output,
                         x_batch_train=x_batch_train,
@@ -181,6 +183,7 @@ class VAE_Trainer:
                         kl_weight=curr_kl_weight_before_update,
                     )
 
+                    # Decide if tripwire activated
                     decision = self.step_guard.handle_step(step_result)
 
                     if decision.should_raise:
@@ -192,6 +195,7 @@ class VAE_Trainer:
                     if decision.should_update_prev_kl:
                         self.prev_kl_tensor.assign(decision.prev_kl_value)
 
+                    # Record recon & kl losses
                     curr_loss_recon = step_result.loss_recon
                     curr_loss_kl = step_result.loss_kl
 
@@ -199,6 +203,7 @@ class VAE_Trainer:
                     last_kl = curr_loss_kl
                     last_kl_weight = curr_kl_weight_before_update
 
+                    # Update according to loss policy
                     update_info = self.loss_policy.update(curr_loss_recon, curr_loss_kl)
                     weight_direction = update_info["weight_direction"]
                     num_maxes = update_info["num_maxes"]
@@ -213,12 +218,14 @@ class VAE_Trainer:
                             (epoch, step, update_info["update_factor"])
                         )
 
+                    # Write current results/state to text file
+                    # Record kl weight that was just used, not one to be used next
                     self.monitor.record_text_line(
                         epoch=epoch,
                         step=step,
                         loss_recon=curr_loss_recon,
                         loss_kl=curr_loss_kl,
-                        curr_kl_weight=curr_kl_weight,
+                        curr_kl_weight=curr_kl_weight_before_update,
                         test1=test1,
                         test2=test2,
                         num_maxes=num_maxes,
@@ -235,6 +242,8 @@ class VAE_Trainer:
                         ),
                     )
 
+                    # Create image showing how validation images are reconstructed
+                    # and how images are generated
                     if self.monitor.is_snapshot_step(step):
                         self.snapshotter.save_snapshot(
                             validation_dataset=self.data.validation_dataset,
@@ -246,14 +255,17 @@ class VAE_Trainer:
                             kl_loss=curr_loss_kl,
                         )
 
+                    # Append losses to running lists
+                    # Record kl weight that was just used, not one to be used next
                     self.monitor.record_losses(
                         curr_loss_recon=curr_loss_recon,
                         curr_loss_kl=curr_loss_kl,
-                        curr_kl_weight=curr_kl_weight,
+                        curr_kl_weight=curr_kl_weight_before_update,
                         recon_ssim=step_result.recon_ssim,
                         active_latent_dims=step_result.active_latent_dims,
                     )
 
+                    # Add stats on latent layer to running lists
                     self.monitor.record_latent_stats(
                         mu_mean=tf.reduce_mean(step_result.mu, 0),
                         log_var_mean=tf.reduce_mean(step_result.log_var, 0),
