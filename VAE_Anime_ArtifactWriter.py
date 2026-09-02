@@ -52,7 +52,8 @@ class ArtifactWriter:
         self.loss_text_fh.write(
             f"{epoch} -- {step} -- {float(loss_recon):.4f} -- {float(loss_kl):.4e} -- "
             f"{float(curr_kl_weight):.4e}  {test1} {test2} {num_maxes} "
-            f"{max_kl_weight_seen} {min_kl_weight_seen} {window_len} "
+            f"{float(max_kl_weight_seen):.0e} "
+            f"{float(min_kl_weight_seen):.0e} {window_len} "
             f"{float(kl_jump_ratio):.4e} {float(max_log_var):.4e} "
             f"{float(min_log_var):.4e} {float(max_grad_norm):.4e}\n"
         )
