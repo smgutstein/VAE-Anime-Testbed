@@ -160,7 +160,7 @@ def write_run_summary(
         "image_size": cfg.image_size,
         "save_net": cfg.save_net,
         "beta": cfg.beta,
-        "beta_eff": cfg.beta/cfg.latent_dim,
+        "beta_eff": cfg.beta/cfg.latent_dim if cfg.beta is not None else None,
         "initial_kl_weight": cfg.initial_kl_weight,
         "max_kl_weight": cfg.max_kl_weight,
         "kl_weight_update_factor": cfg.kl_weight_update_factor,
