@@ -1,7 +1,7 @@
 import pickle
 from pathlib import Path
 from VAE_Anime_Artifacts import (
-    LOSS_TEXT_FILE, LOSS_EVENTS_FILE, LATENT_STATS_FILE, LATENT_VAR_STATS_FILE,
+    LOSS_TEXT_FILE, VAL_LOSS_TEXT_FILE, LOSS_EVENTS_FILE, LATENT_STATS_FILE, LATENT_VAR_STATS_FILE,
     LATENT_KL_STATS_FILE,
     LossEventChunk, LatentMeanChunk, LatentVarChunk, LatentKLChunk
 )
@@ -11,6 +11,7 @@ class ArtifactWriter:
     def __init__(self, stats_dir):
         self.stats_dir = Path(stats_dir)
         self.loss_text_fh = None
+        self.val_loss_text_fh = None
         self.loss_events_fh = None
         self.latent_stats_fh = None
         self.latent_var_stats_fh = None
@@ -18,6 +19,7 @@ class ArtifactWriter:
 
     def open(self):
         self.loss_text_fh = open(self.stats_dir / LOSS_TEXT_FILE, "w")
+        self.val_loss_text_fh = open(self.stats_dir / VAL_LOSS_TEXT_FILE, "w")
         self.loss_events_fh = open(self.stats_dir / LOSS_EVENTS_FILE, "wb")
         self.latent_stats_fh = open(self.stats_dir / LATENT_STATS_FILE, "wb")
         self.latent_var_stats_fh = open(self.stats_dir / LATENT_VAR_STATS_FILE, "wb")
@@ -58,6 +60,42 @@ class ArtifactWriter:
             f"{float(min_log_var):.4e} {float(max_grad_norm):.4e}\n"
         )
 
+    def write_val_loss_text_header(self):
+        # The first five fields match losses_file.txt so VAE_Loss_Records
+        # parses both without modification. recon_loss is the mu-based
+        # reconstruction; the sampled-z variant follows in the diagnostics.
+        self.val_loss_text_fh.write(
+            "epoch -- step -- recon_loss -- kl_loss -- kl_weight  "
+            "recon_sampled ssim_mu ssim_sampled active_dims kl_sum "
+            "agg_post_mean agg_post_min agg_post_max n_images\n"
+        )
+
+    def write_val_loss_text_line(
+        self,
+        epoch,
+        step,
+        recon_mu,
+        recon_sampled,
+        loss_kl,
+        kl_sum,
+        curr_kl_weight,
+        ssim_mu,
+        ssim_sampled,
+        active_latent_dims,
+        agg_post_mean,
+        agg_post_min,
+        agg_post_max,
+        n_images,
+    ):
+        self.val_loss_text_fh.write(
+            f"{epoch} -- {step} -- {float(recon_mu):.4f} -- "
+            f"{float(loss_kl):.4e} -- {float(curr_kl_weight):.4e}  "
+            f"{float(recon_sampled):.4f} {float(ssim_mu):.4f} "
+            f"{float(ssim_sampled):.4f} {int(active_latent_dims)} "
+            f"{float(kl_sum):.4e} {float(agg_post_mean):.4e} "
+            f"{float(agg_post_min):.4e} {float(agg_post_max):.4e} "
+            f"{int(n_images)}\n"
+        )
 
 
     def write_loss_chunk(
@@ -100,6 +138,7 @@ class ArtifactWriter:
     def flush(self):
         for fh in (
             self.loss_text_fh,
+            self.val_loss_text_fh,
             self.loss_events_fh,
             self.latent_stats_fh,
             self.latent_var_stats_fh,
@@ -111,6 +150,7 @@ class ArtifactWriter:
     def close(self):
         for fh in (
             self.loss_text_fh,
+            self.val_loss_text_fh,
             self.loss_events_fh,
             self.latent_stats_fh,
             self.latent_var_stats_fh,

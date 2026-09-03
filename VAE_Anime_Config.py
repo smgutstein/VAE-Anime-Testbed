@@ -90,6 +90,7 @@ class TrainerConfig:
     # Monitoring
     snapshot_every: int
     flush_every_epochs: int
+    validate_every_epochs: int
     train_preview_count: int
     valid_preview_count: int
     take_initial_snapshot: bool
@@ -216,6 +217,9 @@ class TrainerConfig:
             flush_every_epochs=config.getint(
                 "Monitoring_Parameters", "flush_every_epochs", fallback=100
             ),
+            validate_every_epochs=config.getint(
+                "Monitoring_Parameters", "validate_every_epochs", fallback=25
+            ),
             train_preview_count=config.getint("Monitoring_Parameters", "train_preview_count"),
             valid_preview_count=config.getint("Monitoring_Parameters", "valid_preview_count"),
             take_initial_snapshot=parse_bool(
@@ -320,6 +324,8 @@ class TrainerConfig:
             raise ValueError("snapshot_every must be > 0")
         if self.flush_every_epochs <= 0:
             raise ValueError("flush_every_epochs must be > 0")
+        if self.validate_every_epochs <= 0:
+            raise ValueError("validate_every_epochs must be > 0")
         if self.train_preview_count < 0:
             raise ValueError("train_preview_count must be >= 0")
         if self.valid_preview_count < 0:

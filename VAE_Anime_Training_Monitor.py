@@ -33,6 +33,7 @@ class TrainingMonitor:
     def open(self):
         self.writer.open()
         self.writer.write_loss_text_header()
+        self.writer.write_val_loss_text_header()
         return self
 
     def close(self):
@@ -116,6 +117,25 @@ class TrainingMonitor:
 
         if kl_per_dim is not None:
             self.kl_per_dim_list.append(kl_per_dim)
+
+    def record_validation(self, epoch, step, kl_weight, result):
+        """Write one held-out evaluation row. `result` is a ValidationResult."""
+        self.writer.write_val_loss_text_line(
+            epoch=epoch,
+            step=step,
+            recon_mu=result.recon_mu,
+            recon_sampled=result.recon_sampled,
+            loss_kl=result.kl_loss,
+            kl_sum=result.kl_sum,
+            curr_kl_weight=kl_weight,
+            ssim_mu=result.ssim_mu,
+            ssim_sampled=result.ssim_sampled,
+            active_latent_dims=result.active_latent_dims,
+            agg_post_mean=result.agg_post_var_mean,
+            agg_post_min=result.agg_post_var_min,
+            agg_post_max=result.agg_post_var_max,
+            n_images=result.n_images,
+        )
 
     def maybe_flush_step(self, step):
         if self.is_snapshot_step(step):

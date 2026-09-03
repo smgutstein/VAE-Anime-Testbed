@@ -23,6 +23,7 @@ from VAE_Anime_Snapshotter import VAESnapshotter
 from VAE_Anime_StepGuard import StepGuard, StepResult
 from VAE_Anime_Training_Monitor import TrainingMonitor
 from VAE_Anime_TrainStep import train_step, build_step_result
+from VAE_Anime_Validate import evaluate_validation_set
 
 from utils import setup_logging
 
@@ -284,6 +285,42 @@ class VAE_Trainer:
                     out_str += f"{weight_direction} kl_weight = {curr_kl_weight_before_update:.4e} "
                     out_str += f"tot run time = {tot_delta_time}"
                     logging.info(out_str)
+
+                # Held-out evaluation on the full validation split. Epoch-based
+                # rather than step-based: is_snapshot_step fires several times
+                # per epoch, which would cost more than training.
+                is_last_epoch = epoch == self.cfg.epochs - 1
+                if (epoch % self.cfg.validate_every_epochs == 0) or is_last_epoch:
+                    val_result = evaluate_validation_set(
+                        validation_dataset=self.data.validation_dataset,
+                        encoder_net=self.vae.encoder.encoder_net,
+                        decoder_net=self.vae.decoder.decoder_net,
+                        loss_fn=self.mse_loss,
+                        num_input_pixels=self.vae.encoder.num_input_pixels,
+                        active_dim_kl_threshold=self.cfg.active_dim_kl_threshold,
+                        seed=self.cfg.seed,
+                    )
+                    self.monitor.record_validation(
+                        epoch=epoch,
+                        step=step,
+                        kl_weight=float(self.loss_policy.current_value()),
+                        result=val_result,
+                    )
+                    logging.info(
+                        "Validation epoch %d: recon_mu=%.4f recon_sampled=%.4f "
+                        "kl=%.4e ssim_mu=%.4f active_dims=%d "
+                        "agg_post_var mean/min/max=%.3f/%.3f/%.3f over %d images",
+                        epoch,
+                        val_result.recon_mu,
+                        val_result.recon_sampled,
+                        val_result.kl_loss,
+                        val_result.ssim_mu,
+                        val_result.active_latent_dims,
+                        val_result.agg_post_var_mean,
+                        val_result.agg_post_var_min,
+                        val_result.agg_post_var_max,
+                        val_result.n_images,
+                    )
 
             logging.info("End Time %s" % ctime())
             delta_time = str(timedelta(seconds=time() - start_time))

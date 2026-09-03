@@ -4,6 +4,7 @@ from pathlib import Path
 SCHEMA_VERSION = 2
 
 LOSS_TEXT_FILE = "losses_file.txt"
+VAL_LOSS_TEXT_FILE = "val_losses_file.txt"
 LOSS_EVENTS_FILE = "loss_events.pkl"
 LATENT_STATS_FILE = "latent_stats.pkl"
 LATENT_VAR_STATS_FILE = "latent_var_stats.pkl"
