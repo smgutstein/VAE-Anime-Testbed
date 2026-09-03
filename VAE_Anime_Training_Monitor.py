@@ -136,6 +136,11 @@ class TrainingMonitor:
             agg_post_max=result.agg_post_var_max,
             n_images=result.n_images,
         )
+        self.writer.write_val_latent_chunk(
+            epoch=epoch,
+            kl_per_dim=result.kl_per_dim,
+            agg_post_var_per_dim=result.agg_post_var_per_dim,
+        )
 
     def maybe_flush_step(self, step):
         if self.is_snapshot_step(step):

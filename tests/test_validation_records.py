@@ -256,3 +256,74 @@ class TestReadValLossRecords:
         path = write_val_losses(tmp_path, body)
         assert len(read_val_loss_records(path)) == 1
         assert len(read_val_loss_records(path, require_positive_kl=False)) == 2
+
+
+class TestPerDimensionValidationChunks:
+    """
+    Round-trip of the per-dimension validation arrays.
+
+    The scalar summaries in val_losses_file.txt can sit near 1.0 while
+    individual dimensions are far from it, so the per-dimension aggregate
+    posterior array is recorded separately and must survive write/read.
+    """
+
+    @staticmethod
+    def _writer(tmp_path):
+        from VAE_Anime_ArtifactWriter import ArtifactWriter
+        stats = tmp_path / "expt_1" / "stats"
+        stats.mkdir(parents=True)
+        writer = ArtifactWriter(stats)
+        writer.open()
+        return writer, stats
+
+    def test_chunks_round_trip(self, tmp_path):
+        from VAE_Anime_ArtifactReader import ArtifactReader
+
+        writer, stats = self._writer(tmp_path)
+        writer.write_val_latent_chunk(0, [0.1, 0.2, 0.3], [1.0, 0.9, 1.1])
+        writer.write_val_latent_chunk(25, [0.4, 0.5, 0.6], [1.2, 0.8, 1.3])
+        writer.close()
+
+        series = ArtifactReader(stats).read_val_latent_series()
+        assert series["epochs"] == [0, 25]
+        assert series["kl_per_dim"][1] == pytest.approx([0.4, 0.5, 0.6])
+        assert series["agg_post_var_per_dim"][0] == pytest.approx([1.0, 0.9, 1.1])
+
+    def test_missing_file_returns_empty_series(self, tmp_path):
+        from VAE_Anime_ArtifactReader import ArtifactReader
+
+        stats = tmp_path / "expt_1" / "stats"
+        stats.mkdir(parents=True)
+        series = ArtifactReader(stats).read_val_latent_series()
+        assert series == {"epochs": [], "kl_per_dim": [], "agg_post_var_per_dim": []}
+
+    def test_scalar_summary_can_hide_per_dimension_spread(self, tmp_path):
+        """
+        The case this artifact exists for: a mean near 1.0 with dimensions
+        far from it, as seen at epoch 99 of the first validation run
+        (agg_post_mean 0.994 while active_dims had fallen to 144).
+        """
+        from VAE_Anime_ArtifactReader import ArtifactReader
+        import numpy as np
+
+        per_dim = [0.2] * 4 + [1.8] * 4          # mean exactly 1.0
+        writer, stats = self._writer(tmp_path)
+        writer.write_val_latent_chunk(99, [0.01] * 8, per_dim)
+        writer.close()
+
+        got = ArtifactReader(stats).read_val_latent_series()["agg_post_var_per_dim"][0]
+        assert np.mean(got) == pytest.approx(1.0)
+        assert min(got) == pytest.approx(0.2)
+        assert max(got) == pytest.approx(1.8)
+
+    def test_one_chunk_per_evaluation(self, tmp_path):
+        from VAE_Anime_ArtifactReader import ArtifactReader
+
+        writer, stats = self._writer(tmp_path)
+        for epoch in range(0, 100, 25):
+            writer.write_val_latent_chunk(epoch, [0.1] * 512, [1.0] * 512)
+        writer.close()
+
+        series = ArtifactReader(stats).read_val_latent_series()
+        assert series["epochs"] == [0, 25, 50, 75]
+        assert all(len(row) == 512 for row in series["agg_post_var_per_dim"])

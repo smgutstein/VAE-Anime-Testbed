@@ -15,6 +15,8 @@ from VAE_Anime_Artifacts import (
     LatentMeanChunk,
     LatentVarChunk,
     LatentKLChunk,
+    ValLatentChunk,
+    VAL_LATENT_STATS_FILE,
 )
 
 
@@ -208,6 +210,31 @@ class ArtifactReader:
         n = min(len(mu_var), len(log_var_var))
         return LatentVarSeries(mu_var=mu_var[:n], log_var_var=log_var_var[:n])
 
+
+
+    def read_val_latent_series(self):
+        """Per-dimension validation latent stats, one entry per evaluation."""
+        path = self.stats_dir / VAL_LATENT_STATS_FILE
+        epochs = []
+        kl_per_dim = []
+        agg_post_var_per_dim = []
+
+        if not path.is_file():
+            return {"epochs": [], "kl_per_dim": [], "agg_post_var_per_dim": []}
+
+        for obj in self._iter_pickled_objects(path):
+            if not isinstance(obj, ValLatentChunk):
+                logging.warning("Unexpected object in %s: %s", path, type(obj))
+                continue
+            epochs.append(obj.epoch)
+            kl_per_dim.append(list(obj.kl_per_dim))
+            agg_post_var_per_dim.append(list(obj.agg_post_var_per_dim))
+
+        return {
+            "epochs": epochs,
+            "kl_per_dim": kl_per_dim,
+            "agg_post_var_per_dim": agg_post_var_per_dim,
+        }
 
     def _read_new_latent_kl_series(self, path):
         kl_per_dim = []

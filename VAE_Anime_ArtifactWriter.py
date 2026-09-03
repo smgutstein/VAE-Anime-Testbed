@@ -2,8 +2,9 @@ import pickle
 from pathlib import Path
 from VAE_Anime_Artifacts import (
     LOSS_TEXT_FILE, VAL_LOSS_TEXT_FILE, LOSS_EVENTS_FILE, LATENT_STATS_FILE, LATENT_VAR_STATS_FILE,
-    LATENT_KL_STATS_FILE,
-    LossEventChunk, LatentMeanChunk, LatentVarChunk, LatentKLChunk
+    LATENT_KL_STATS_FILE, VAL_LATENT_STATS_FILE,
+    LossEventChunk, LatentMeanChunk, LatentVarChunk, LatentKLChunk,
+    ValLatentChunk,
 )
 
 
@@ -16,6 +17,7 @@ class ArtifactWriter:
         self.latent_stats_fh = None
         self.latent_var_stats_fh = None
         self.latent_kl_stats_fh = None
+        self.val_latent_stats_fh = None
 
     def open(self):
         self.loss_text_fh = open(self.stats_dir / LOSS_TEXT_FILE, "w")
@@ -24,6 +26,7 @@ class ArtifactWriter:
         self.latent_stats_fh = open(self.stats_dir / LATENT_STATS_FILE, "wb")
         self.latent_var_stats_fh = open(self.stats_dir / LATENT_VAR_STATS_FILE, "wb")
         self.latent_kl_stats_fh = open(self.stats_dir / LATENT_KL_STATS_FILE, "wb")
+        self.val_latent_stats_fh = open(self.stats_dir / VAL_LATENT_STATS_FILE, "wb")
         return self
 
     def write_loss_text_header(self):
@@ -135,6 +138,14 @@ class ArtifactWriter:
         )
         pickle.dump(chunk, self.latent_kl_stats_fh)
 
+    def write_val_latent_chunk(self, epoch, kl_per_dim, agg_post_var_per_dim):
+        chunk = ValLatentChunk(
+            epoch=int(epoch),
+            kl_per_dim=list(kl_per_dim),
+            agg_post_var_per_dim=list(agg_post_var_per_dim),
+        )
+        pickle.dump(chunk, self.val_latent_stats_fh)
+
     def flush(self):
         for fh in (
             self.loss_text_fh,
@@ -143,6 +154,7 @@ class ArtifactWriter:
             self.latent_stats_fh,
             self.latent_var_stats_fh,
             self.latent_kl_stats_fh,
+            self.val_latent_stats_fh,
         ):
             if fh is not None:
                 fh.flush()
@@ -155,6 +167,7 @@ class ArtifactWriter:
             self.latent_stats_fh,
             self.latent_var_stats_fh,
             self.latent_kl_stats_fh,
+            self.val_latent_stats_fh,
         ):
             if fh is not None:
                 fh.close()
