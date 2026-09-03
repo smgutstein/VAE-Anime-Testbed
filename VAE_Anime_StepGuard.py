@@ -89,6 +89,13 @@ class StepGuard:
         self.lr_floor = float(lr_floor)
         self.max_consecutive_tripwires = int(max_consecutive_tripwires)
         self.consecutive_tripwires = 0
+        # Cumulative and never reset. consecutive_tripwires above is zeroed
+        # on any accepted step, so it cannot report how often the guard fired
+        # across a run.
+        self.total_tripwires = 0
+        self.tripwire_events = []
+        self.initial_learning_rate = float(self.optimizer.learning_rate.numpy())
+        self.min_learning_rate_seen = self.initial_learning_rate
 
         self.suspicious_kl_threshold = float(suspicious_kl_threshold)
         self.suspicious_abs_mu_threshold = float(suspicious_abs_mu_threshold)
@@ -281,12 +288,58 @@ class StepGuard:
             exception=exc,
         )
 
+
+    def tripwire_report(self):
+        """
+        Cumulative trip-wire and learning-rate state for the run summary.
+
+        The learning-rate backoff has no restore path, so the realized rate
+        can differ from the configured one by orders of magnitude by the end
+        of a long run. run_summary.json otherwise reports only the configured
+        value, which makes runs grouped by learning rate not comparable.
+
+        tripwire_events records every firing with its epoch and step, so a
+        run's trips can be placed against its loss curves without collecting
+        the per-trip diagnostic JSON filenames.
+        """
+        current_lr = float(self.optimizer.learning_rate.numpy())
+        return {
+            "total_tripwires": int(self.total_tripwires),
+            "tripwire_events": list(self.tripwire_events),
+            "first_tripwire_epoch": (
+                self.tripwire_events[0]["epoch"] if self.tripwire_events else None
+            ),
+            "last_tripwire_epoch": (
+                self.tripwire_events[-1]["epoch"] if self.tripwire_events else None
+            ),
+            "initial_learning_rate": self.initial_learning_rate,
+            "final_learning_rate": current_lr,
+            "min_learning_rate_seen": self.min_learning_rate_seen,
+            "learning_rate_backoff_applied": (
+                current_lr < self.initial_learning_rate
+            ),
+        }
+
     def _handle_tripwire_skip(self, result: StepResult) -> GuardDecision:
         self.consecutive_tripwires += 1
+        self.total_tripwires += 1
 
         old_lr = float(self.optimizer.learning_rate.numpy())
         new_lr = max(old_lr * self.lr_backoff, self.lr_floor)
         self.optimizer.learning_rate.assign(new_lr)
+        self.min_learning_rate_seen = min(self.min_learning_rate_seen, new_lr)
+
+        self.tripwire_events.append({
+            "epoch": int(result.epoch),
+            "step": int(result.step),
+            "consecutive": int(self.consecutive_tripwires),
+            "learning_rate_before": old_lr,
+            "learning_rate_after": new_lr,
+            "kl_jump_ratio": float(result.kl_jump_ratio),
+            "grad_norm": float(result.grad_norm),
+            "max_log_var": float(result.max_log_var),
+            "kl_weight": float(result.kl_weight),
+        })
 
         diagnostics = latent_diagnostics(result.mu, result.log_var)
         diagnostics["note"] = (
@@ -303,6 +356,9 @@ class StepGuard:
         diagnostics["old_lr"] = old_lr
         diagnostics["new_lr"] = new_lr
         diagnostics["consecutive_tripwires"] = int(self.consecutive_tripwires)
+        diagnostics["total_tripwires"] = int(self.total_tripwires)
+        diagnostics["learning_rate_before"] = old_lr
+        diagnostics["learning_rate_after"] = new_lr
         diagnostics["max_consecutive_tripwires"] = int(self.max_consecutive_tripwires)
         diagnostics["tripwire_tests_triggered"] = np.array(result.toxic_reasons, dtype=str)
         diagnostics["tripwire_threshold_kl_jump_ratio"] = float(self.kl_jump_ratio_threshold)

@@ -336,6 +336,11 @@ class VAE_Trainer:
             logging.info(f"Number of kl_weight changes: {len(weight_update_events)}")
             logging.info(weight_update_events)
 
+            guard_report = (
+                self.step_guard.tripwire_report()
+                if getattr(self, "step_guard", None) is not None
+                else None
+            )
             write_run_summary(
                 output_dir=self.output_dir,
                 cfg=self.cfg,
@@ -346,9 +351,15 @@ class VAE_Trainer:
                 final_recon=last_recon,
                 final_kl=last_kl,
                 final_kl_weight=last_kl_weight,
+                tripwire_report=guard_report,
             )
 
         except Exception as e:
+            guard_report = (
+                self.step_guard.tripwire_report()
+                if getattr(self, "step_guard", None) is not None
+                else None
+            )
             write_run_summary(
                 output_dir=self.output_dir,
                 cfg=self.cfg,
@@ -359,6 +370,7 @@ class VAE_Trainer:
                 final_recon=last_recon,
                 final_kl=last_kl,
                 final_kl_weight=last_kl_weight,
+                tripwire_report=guard_report,
                 error_message=str(e),
             )
             raise

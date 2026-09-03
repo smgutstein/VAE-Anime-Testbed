@@ -137,6 +137,7 @@ def write_run_summary(
     final_kl=None,
     final_kl_weight=None,
     error_message=None,
+    tripwire_report=None,
 ):
     summary_path = output_dir / "run_summary.json"
 
@@ -172,6 +173,22 @@ def write_run_summary(
         "end_time": ctime(end_time) if end_time is not None else None,
         "runtime_seconds": runtime_seconds,
     }
+
+    # StepGuard's learning-rate backoff is permanent, so "learning_rate" above
+    # is the configured value and may not be what most of the run used.
+    if tripwire_report is not None:
+        summary.update(tripwire_report)
+    else:
+        summary.update({
+            "total_tripwires": None,
+            "tripwire_events": [],
+            "first_tripwire_epoch": None,
+            "last_tripwire_epoch": None,
+            "initial_learning_rate": None,
+            "final_learning_rate": None,
+            "min_learning_rate_seen": None,
+            "learning_rate_backoff_applied": None,
+        })
 
     summary = {k: _json_safe(v) for k, v in summary.items()}
     with open(summary_path, "w") as f:

@@ -190,3 +190,143 @@ def test_toxic_skipped_step_is_not_recorded_as_recent_good(tmp_path, monkeypatch
 
     assert decision.should_continue is True
     assert len(guard.recent_good_steps) == 0
+
+class _FakeLR:
+    def __init__(self, value):
+        self.value = float(value)
+
+    def numpy(self):
+        return self.value
+
+    def assign(self, new_value):
+        self.value = float(new_value)
+
+
+class _FakeOptimizer:
+    def __init__(self, lr):
+        self.learning_rate = _FakeLR(lr)
+
+
+class TestTripwireReport:
+    """
+    The learning-rate backoff has no restore path, so run_summary.json's
+    "learning_rate" (the configured value) can be orders of magnitude above
+    what most of a run actually used. These cumulative counters make that
+    visible instead of leaving it implicit.
+    """
+
+    @staticmethod
+    def _guard(lr=2e-3, backoff=0.5, floor=1e-6):
+        from VAE_Anime_StepGuard import StepGuard
+        guard = StepGuard.__new__(StepGuard)
+        guard.optimizer = _FakeOptimizer(lr)
+        guard.lr_backoff = backoff
+        guard.lr_floor = floor
+        guard.consecutive_tripwires = 0
+        guard.total_tripwires = 0
+        guard.tripwire_events = []
+        guard.initial_learning_rate = lr
+        guard.min_learning_rate_seen = lr
+        return guard
+
+    @staticmethod
+    def _trip(guard, epoch=0, step=0):
+        """The learning-rate and bookkeeping half of _handle_tripwire_skip."""
+        guard.consecutive_tripwires += 1
+        guard.total_tripwires += 1
+        old_lr = float(guard.optimizer.learning_rate.numpy())
+        new_lr = max(old_lr * guard.lr_backoff, guard.lr_floor)
+        guard.optimizer.learning_rate.assign(new_lr)
+        guard.min_learning_rate_seen = min(guard.min_learning_rate_seen, new_lr)
+        guard.tripwire_events.append({
+            "epoch": int(epoch),
+            "step": int(step),
+            "consecutive": int(guard.consecutive_tripwires),
+            "learning_rate_before": old_lr,
+            "learning_rate_after": new_lr,
+            "kl_jump_ratio": 12.5,
+            "grad_norm": 900.0,
+            "max_log_var": 4.0,
+            "kl_weight": 417.3,
+        })
+
+    def test_clean_run_reports_no_backoff(self):
+        report = self._guard().tripwire_report()
+        assert report["total_tripwires"] == 0
+        assert report["tripwire_events"] == []
+        assert report["first_tripwire_epoch"] is None
+        assert report["last_tripwire_epoch"] is None
+        assert report["learning_rate_backoff_applied"] is False
+        assert report["final_learning_rate"] == report["initial_learning_rate"]
+
+    def test_total_survives_the_consecutive_counter_resetting(self):
+        guard = self._guard()
+        for _ in range(3):
+            self._trip(guard)
+            guard.consecutive_tripwires = 0   # an accepted step
+
+        report = guard.tripwire_report()
+        assert guard.consecutive_tripwires == 0
+        assert report["total_tripwires"] == 3
+
+    def test_backoff_is_permanent_across_isolated_trips(self):
+        guard = self._guard(lr=2e-3)
+        for _ in range(4):
+            self._trip(guard)
+            guard.consecutive_tripwires = 0
+
+        report = guard.tripwire_report()
+        assert report["final_learning_rate"] == pytest.approx(2e-3 / 16)
+        assert report["learning_rate_backoff_applied"] is True
+
+    def test_learning_rate_stops_at_the_floor(self):
+        guard = self._guard(lr=2e-3, floor=1e-6)
+        for _ in range(50):
+            self._trip(guard)
+
+        report = guard.tripwire_report()
+        assert report["final_learning_rate"] == pytest.approx(1e-6)
+        assert report["min_learning_rate_seen"] == pytest.approx(1e-6)
+        assert report["total_tripwires"] == 50
+
+
+    def test_each_firing_records_its_epoch_and_step(self):
+        guard = self._guard()
+        self._trip(guard, epoch=106, step=30)
+        guard.consecutive_tripwires = 0
+        self._trip(guard, epoch=107, step=5)
+
+        events = guard.tripwire_report()["tripwire_events"]
+        assert [(e["epoch"], e["step"]) for e in events] == [(106, 30), (107, 5)]
+        assert [e["consecutive"] for e in events] == [1, 1]
+
+    def test_first_and_last_epoch_bracket_the_events(self):
+        guard = self._guard()
+        for epoch in (12, 480, 4931):
+            self._trip(guard, epoch=epoch, step=7)
+            guard.consecutive_tripwires = 0
+
+        report = guard.tripwire_report()
+        assert report["first_tripwire_epoch"] == 12
+        assert report["last_tripwire_epoch"] == 4931
+        assert report["total_tripwires"] == 3
+
+    def test_events_carry_the_learning_rate_on_both_sides(self):
+        guard = self._guard(lr=2e-3)
+        self._trip(guard, epoch=50, step=1)
+        self._trip(guard, epoch=50, step=2)
+
+        events = guard.tripwire_report()["tripwire_events"]
+        assert events[0]["learning_rate_before"] == pytest.approx(2e-3)
+        assert events[0]["learning_rate_after"] == pytest.approx(1e-3)
+        assert events[1]["learning_rate_before"] == pytest.approx(1e-3)
+        assert events[1]["learning_rate_after"] == pytest.approx(5e-4)
+        # Consecutive trips, so the counter climbs.
+        assert [e["consecutive"] for e in events] == [1, 2]
+
+    def test_report_returns_a_copy_of_the_event_list(self):
+        guard = self._guard()
+        self._trip(guard, epoch=1, step=1)
+        report = guard.tripwire_report()
+        report["tripwire_events"].append({"epoch": 999})
+        assert len(guard.tripwire_events) == 1
