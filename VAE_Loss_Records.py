@@ -29,9 +29,10 @@ from pathlib import Path
 
 
 LOSS_FILE_NAME = "losses_file.txt"
+VAL_LOSS_FILE_NAME = "val_losses_file.txt"
 
 
-def resolve_loss_file(path):
+def resolve_loss_file(path, file_name=LOSS_FILE_NAME):
     """
     Accept either an experiment directory or the loss file itself.
 
@@ -40,7 +41,7 @@ def resolve_loss_file(path):
     """
     path = Path(path)
     if path.is_dir():
-        return path / "stats" / LOSS_FILE_NAME
+        return path / "stats" / file_name
     return path
 
 
@@ -120,6 +121,107 @@ def read_loss_records(path, require_positive_kl=True, warn=True):
 
     if not records:
         raise ValueError(f"No valid loss records found in {loss_file}")
+
+    return records
+
+
+# Evaluation columns in val_losses_file.txt, in header order, following the
+# kl_weight token inside the fifth "--" field. read_loss_records ignores
+# everything past that token; this parser reads it.
+_VAL_TRAILING_FIELDS = (
+    ("recon_sampled", float),
+    ("ssim_mu", float),
+    ("ssim_sampled", float),
+    ("active_dims", int),
+    ("kl_sum", float),
+    ("agg_post_mean", float),
+    ("agg_post_min", float),
+    ("agg_post_max", float),
+    ("n_images", int),
+)
+
+
+def read_val_loss_records(path, require_positive_kl=True, warn=True):
+    """
+    Read val_losses_file.txt, including the evaluation-specific columns.
+
+    Returns a superset of read_loss_records: the same epoch, step, iteration,
+    line_number, recon_loss, kl_loss and kl_weight keys, plus recon_sampled,
+    ssim_mu, ssim_sampled, active_dims, kl_sum, agg_post_mean, agg_post_min,
+    agg_post_max and n_images.
+
+    Because the shared keys match, the returned records go straight into
+    pareto_records without modification.
+
+    Note on recon_loss: in val_losses_file.txt that position holds the
+    mu-based reconstruction, while in losses_file.txt it holds the
+    sampled-z reconstruction. The two are not the same quantity. Use
+    recon_sampled here when comparing against the training curve.
+    """
+    loss_file = resolve_loss_file(path, VAL_LOSS_FILE_NAME)
+
+    if not loss_file.is_file():
+        raise FileNotFoundError(f"Validation loss file does not exist: {loss_file}")
+
+    records = []
+    skipped = 0
+
+    with loss_file.open("r", encoding="utf-8") as fh:
+        next(fh, None)  # header
+
+        for line_number, line in enumerate(fh, start=2):
+            if not line.strip():
+                continue
+
+            fields = [field.strip() for field in line.split("--")]
+            if len(fields) < 5:
+                skipped += 1
+                continue
+
+            trailing = fields[4].split()
+            if len(trailing) < 1 + len(_VAL_TRAILING_FIELDS):
+                skipped += 1
+                continue
+
+            try:
+                record = {
+                    "epoch": int(fields[0]),
+                    "step": int(fields[1]),
+                    "recon_loss": float(fields[2]),
+                    "kl_loss": float(fields[3]),
+                    "kl_weight": float(trailing[0]),
+                }
+                for (name, cast), token in zip(_VAL_TRAILING_FIELDS, trailing[1:]):
+                    record[name] = cast(float(token)) if cast is int else cast(token)
+            except ValueError:
+                skipped += 1
+                continue
+
+            finite_values = [
+                record["recon_loss"],
+                record["kl_loss"],
+                record["recon_sampled"],
+            ]
+            if not all(math.isfinite(value) for value in finite_values):
+                skipped += 1
+                continue
+
+            if require_positive_kl and record["kl_loss"] <= 0.0:
+                skipped += 1
+                continue
+
+            record["iteration"] = len(records)
+            record["line_number"] = line_number
+            records.append(record)
+
+    if warn and skipped:
+        print(
+            f"Warning: skipped {skipped} unusable validation "
+            f"record(s) in {loss_file}"
+        )
+
+    if not records:
+        raise ValueError(f"No valid validation records found in {loss_file}")
 
     return records
 

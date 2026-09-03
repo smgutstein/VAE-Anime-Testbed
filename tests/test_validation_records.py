@@ -150,3 +150,109 @@ class TestAggregatePosteriorMath:
         mu_mean = mu_sum / n
         batched = (mu_sq_sum / n - mu_mean ** 2) + sigma_sq_sum / n
         assert np.allclose(single, batched)
+
+
+class TestReadValLossRecords:
+    """
+    read_val_loss_records returns a superset of read_loss_records: the same
+    five shared fields plus the evaluation columns that read_loss_records
+    discards along with the rest of the fifth "--" field.
+    """
+
+    def test_returns_all_evaluation_columns(self, tmp_path):
+        from VAE_Loss_Records import read_val_loss_records
+
+        path = write_val_losses(tmp_path, [val_line(25, 32, "484.0601", "3.4129e-02")])
+        record = read_val_loss_records(path)[0]
+
+        assert record["epoch"] == 25
+        assert record["step"] == 32
+        assert record["recon_loss"] == pytest.approx(484.0601)
+        assert record["kl_loss"] == pytest.approx(3.4129e-02)
+        assert record["kl_weight"] == pytest.approx(417.30)
+        assert record["recon_sampled"] == pytest.approx(61.2345)
+        assert record["ssim_mu"] == pytest.approx(0.8123)
+        assert record["ssim_sampled"] == pytest.approx(0.7654)
+        assert record["active_dims"] == 512
+        assert record["kl_sum"] == pytest.approx(94.208)
+        assert record["agg_post_mean"] == pytest.approx(1.0021)
+        assert record["agg_post_min"] == pytest.approx(0.87654)
+        assert record["agg_post_max"] == pytest.approx(1.1234)
+        assert record["n_images"] == 12713
+
+    def test_shared_fields_match_the_generic_parser(self, tmp_path):
+        from VAE_Loss_Records import read_loss_records, read_val_loss_records
+
+        body = [
+            val_line(0, 32, "1102.3311", "1.8395e-01"),
+            val_line(25, 32, "402.1100", "9.1200e-02"),
+            val_line(50, 32, "88.9010", "6.0000e-01"),
+        ]
+        path = write_val_losses(tmp_path, body)
+
+        shared_keys = ("epoch", "step", "recon_loss", "kl_loss",
+                       "kl_weight", "iteration", "line_number")
+        generic = [{k: r[k] for k in shared_keys} for r in read_loss_records(path)]
+        specific = [{k: r[k] for k in shared_keys} for r in read_val_loss_records(path)]
+        assert generic == specific
+
+    def test_records_feed_pareto_records_unchanged(self, tmp_path):
+        from VAE_Loss_Records import pareto_records, read_val_loss_records
+
+        body = [
+            val_line(0, 32, "1102.3311", "1.8395e-01"),
+            val_line(25, 32, "402.1100", "9.1200e-02"),
+            val_line(50, 32, "500.0000", "5.0000e-01"),   # dominated
+            val_line(75, 32, "88.9010", "6.0000e-01"),
+        ]
+        frontier = pareto_records(read_val_loss_records(write_val_losses(tmp_path, body)))
+
+        assert [r["epoch"] for r in frontier] == [75, 25]
+        # Evaluation columns survive the frontier selection.
+        assert all("agg_post_mean" in r for r in frontier)
+
+    def test_active_dims_and_n_images_are_integers(self, tmp_path):
+        from VAE_Loss_Records import read_val_loss_records
+
+        path = write_val_losses(tmp_path, [val_line(0, 32, "100.0", "1.0e-01")])
+        record = read_val_loss_records(path)[0]
+        assert isinstance(record["active_dims"], int)
+        assert isinstance(record["n_images"], int)
+
+    def test_accepts_experiment_directory_or_file(self, tmp_path):
+        from VAE_Loss_Records import read_val_loss_records
+
+        path = write_val_losses(tmp_path, [val_line(0, 32, "100.0", "1.0e-01")])
+        by_file = read_val_loss_records(path)
+        by_dir = read_val_loss_records(tmp_path / "expt_1")
+        assert by_file == by_dir
+
+    def test_row_with_truncated_trailing_section_is_skipped(self, tmp_path):
+        from VAE_Loss_Records import read_val_loss_records
+
+        good = val_line(0, 32, "100.0", "1.0e-01")
+        short = "25 -- 32 -- 99.0 -- 1.1e-01 -- 4.1730e+02  61.2345 0.8123\n"
+        path = write_val_losses(tmp_path, [good, short, val_line(50, 32, "98.0", "1.2e-01")])
+
+        records = read_val_loss_records(path)
+        assert [r["epoch"] for r in records] == [0, 50]
+        assert [r["iteration"] for r in records] == [0, 1]
+        assert [r["line_number"] for r in records] == [2, 4]
+
+    def test_missing_validation_file_raises(self, tmp_path):
+        from VAE_Loss_Records import read_val_loss_records
+
+        (tmp_path / "expt_1" / "stats").mkdir(parents=True)
+        with pytest.raises(FileNotFoundError):
+            read_val_loss_records(tmp_path / "expt_1")
+
+    def test_non_positive_kl_is_rejected_by_default(self, tmp_path):
+        from VAE_Loss_Records import read_val_loss_records
+
+        body = [
+            val_line(0, 32, "100.0", "1.0e-01"),
+            val_line(25, 32, "99.0", "0.0000e+00"),
+        ]
+        path = write_val_losses(tmp_path, body)
+        assert len(read_val_loss_records(path)) == 1
+        assert len(read_val_loss_records(path, require_positive_kl=False)) == 2
