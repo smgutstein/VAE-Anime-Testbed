@@ -127,8 +127,13 @@ def compare_graphs(experiments, output_dir, skip_fraction=0.10):
         raise ValueError("Need at least one experiment to plot")
 
     fig, ax = plt.subplots(2, figsize=(10, 10), constrained_layout=True)
+    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    experiment_colors = {
+        expt["dir"]: color_cycle[idx % len(color_cycle)]
+        for idx, expt in enumerate(experiments)
+    }
 
-    for idx, expt in enumerate(experiments):
+    for expt in experiments:
         recon_pts = expt["recon_pts"]
         kl_pts = expt["kl_pts"]
         label = expt["label"]
@@ -137,7 +142,9 @@ def compare_graphs(experiments, output_dir, skip_fraction=0.10):
         x = recon_pts[skip_pts:]
         y = kl_pts[skip_pts:]
 
-        ax[0].scatter(x, y, s=1, label=label)
+        ax[0].scatter(
+            x, y, s=1, color=experiment_colors[expt["dir"]], label=label
+        )
 
     ax[0].set_title("Pareto-ish Graph")
     ax[0].set_xlabel("Recon Loss")
@@ -155,7 +162,9 @@ def compare_graphs(experiments, output_dir, skip_fraction=0.10):
         x = recon_pts[skip_pts:]
         y = kl_pts[skip_pts:]
 
-        ax[1].scatter(x, y, s=1, label=label)
+        ax[1].scatter(
+            x, y, s=1, color=experiment_colors[expt["dir"]], label=label
+        )
 
     ax[1].set_xlabel("Recon Loss")
     ax[1].set_ylabel("KL Loss")
