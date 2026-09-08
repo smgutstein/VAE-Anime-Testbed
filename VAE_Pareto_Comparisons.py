@@ -169,7 +169,10 @@ def compare_graphs(experiments, output_dir, skip_fraction=0.10):
     ax[1].set_xlabel("Recon Loss")
     ax[1].set_ylabel("KL Loss")
     ax[1].set_yscale("log")
-    ax[1].legend(markerscale=4)
+    handles, labels = ax[1].get_legend_handles_labels()
+    ax[1].legend(
+        handles[::-1], labels[::-1], markerscale=4
+    )
 
     outfile = output_dir / f"{make_output_stem(experiments, 'Pareto_Comparisons')}.png"
     plt.savefig(outfile, dpi=200)
