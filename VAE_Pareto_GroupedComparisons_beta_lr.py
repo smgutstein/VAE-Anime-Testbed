@@ -25,18 +25,22 @@ Each group shares one color and one legend entry.
 
 import argparse
 import json
-import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
 
 from VAE_Anime_Config import TrainerConfig
 from utils import get_experiment_dir
 from VAE_Loss_Records import (
     read_loss_records as shared_read_loss_records,
     pareto_records,
+)
+from VAE_Pareto_Plotting import (
+    configure_pareto_axes,
+    plot_grouped_frontiers,
+    records_after_burn_in,
+    validate_axis_limits,
 )
 
 
@@ -182,17 +186,16 @@ def get_beta_group(expt_dir, records):
     )
 
 
-def load_experiment(expt_num, parent_dir, skip_fraction):
+def load_experiment(expt_num, parent_dir, burn_in_epochs=5):
     expt_dir = resolve_experiment_dir(parent_dir, expt_num)
     records = read_loss_records(expt_dir)
 
-    skip_points = int(skip_fraction * len(records))
-    retained_records = records[skip_points:]
+    retained_records = records_after_burn_in(records, burn_in_epochs)
 
     if not retained_records:
         raise ValueError(
             f"{expt_dir.name}: no records remain after "
-            f"skip_fraction={skip_fraction}"
+            f"burn_in_epochs={burn_in_epochs}"
         )
 
     frontier_records = pareto_records(retained_records)
@@ -200,7 +203,7 @@ def load_experiment(expt_num, parent_dir, skip_fraction):
     if not frontier_records:
         raise ValueError(
             f"{expt_dir.name}: no Pareto points remain after "
-            f"skip_fraction={skip_fraction}"
+            f"burn_in_epochs={burn_in_epochs}"
         )
 
     group = get_beta_group(expt_dir, records)
@@ -209,6 +212,7 @@ def load_experiment(expt_num, parent_dir, skip_fraction):
         "expt_num": expt_num,
         "dir": expt_dir,
         "records": records,
+        "retained_records": retained_records,
         "frontier_records": frontier_records,
         **group,
     }
@@ -250,9 +254,13 @@ def plot_grouped_pareto_curves(
     output_dir,
     first_expt,
     last_expt,
-    skip_fraction,
+    burn_in_epochs,
     linewidth=1.15,
     alpha=0.60,
+    recon_min=None,
+    recon_max=None,
+    kl_min=None,
+    kl_max=None,
 ):
     """
     Plot every experiment's Pareto front, with one color/legend entry per
@@ -265,50 +273,16 @@ def plot_grouped_pareto_curves(
         constrained_layout=True,
     )
 
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-
-    legend_handles = []
-
-    for group_index, (group_key, group) in enumerate(groups.items()):
-        color = color_cycle[group_index % len(color_cycle)]
-
-        for expt in group["experiments"]:
-            frontier = expt["frontier_records"]
-
-            curve = np.asarray([
-                [
-                    record["recon_loss"],
-                    record["kl_loss"],
-                ]
-                for record in frontier
-            ], dtype=float)
-
-            if len(curve) <=2:
-                continue
-
-            ax.plot(
-                curve[:, 0],
-                curve[:, 1],
-                color=color,
-                linewidth=linewidth,
-                alpha=alpha,
-            )
-
-        legend_handles.append(
-            Line2D(
-                [0],
-                [0],
-                color=color,
-                linewidth=2.5,
-                label=group["label"],
-            )
-        )
-
-    ax.set_xlabel("Recon Loss")
-    ax.set_ylabel("KL Loss")
-    ax.set_yscale("log")
-    ax.set_title(
-        f"Sample Pareto Curves"
+    legend_handles = plot_grouped_frontiers(
+        ax, groups, linewidth=linewidth, alpha=alpha
+    )
+    configure_pareto_axes(
+        ax,
+        title="Sample Pareto Curves",
+        recon_min=recon_min,
+        recon_max=recon_max,
+        kl_min=kl_min,
+        kl_max=kl_max,
     )
 
     ax.legend(
@@ -336,7 +310,8 @@ def save_group_report(
     output_dir,
     first_expt,
     last_expt,
-    skip_fraction,
+    burn_in_epochs,
+    axis_limits,
 ):
     """
     Save a compact record of which experiment was assigned to which group.
@@ -347,7 +322,8 @@ def save_group_report(
         "first_expt": first_expt,
         "last_expt": last_expt,
         "num_experiments": len(experiments),
-        "skip_fraction": skip_fraction,
+        "burn_in_epochs": burn_in_epochs,
+        "axis_limits": axis_limits,
         "groups": [],
     }
 
@@ -440,14 +416,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--skip_fraction",
-        type=float,
-        default=0.10,
-        help=(
-            "Fraction of earliest chronological loss records to exclude "
-            "before calculating each Pareto frontier "
-            "(default: 0.10, matching VAE_Pareto_Comparisons.py)"
-        ),
+        "--burn-in-epochs",
+        type=int,
+        default=5,
+        help="Number of initial zero-based epochs to exclude (default: 5)",
     )
 
     parser.add_argument(
@@ -464,6 +436,11 @@ def parse_args():
         help="Opacity of individual Pareto curves (default: 0.60)",
     )
 
+    parser.add_argument("--recon-min", type=float, default=None)
+    parser.add_argument("--recon-max", type=float, default=None)
+    parser.add_argument("--kl-min", type=float, default=None)
+    parser.add_argument("--kl-max", type=float, default=None)
+
     return parser.parse_args()
 
 
@@ -475,10 +452,16 @@ def main():
             "--first_expt must be less than or equal to --last_expt"
         )
 
-    if not 0.0 <= args.skip_fraction < 1.0:
-        raise ValueError(
-            "--skip_fraction must satisfy 0 <= value < 1"
-        )
+    if args.burn_in_epochs < 0:
+        raise ValueError("--burn-in-epochs must be >= 0")
+
+    axis_limits = {
+        "recon_min": args.recon_min,
+        "recon_max": args.recon_max,
+        "kl_min": args.kl_min,
+        "kl_max": args.kl_max,
+    }
+    validate_axis_limits(**axis_limits)
 
     if args.linewidth <= 0.0:
         raise ValueError("--linewidth must be > 0")
@@ -500,7 +483,7 @@ def main():
             experiment = load_experiment(
                 expt_num=expt_num,
                 parent_dir=args.parent_dir,
-                skip_fraction=args.skip_fraction,
+                burn_in_epochs=args.burn_in_epochs,
             )
         except (FileNotFoundError, ValueError, OSError) as exc:
             print(
@@ -526,9 +509,10 @@ def main():
         output_dir=output_dir,
         first_expt=args.first_expt,
         last_expt=args.last_expt,
-        skip_fraction=args.skip_fraction,
+        burn_in_epochs=args.burn_in_epochs,
         linewidth=args.linewidth,
         alpha=args.alpha,
+        **axis_limits,
     )
 
     save_group_report(
@@ -537,7 +521,8 @@ def main():
         output_dir=output_dir,
         first_expt=args.first_expt,
         last_expt=args.last_expt,
-        skip_fraction=args.skip_fraction,
+        burn_in_epochs=args.burn_in_epochs,
+        axis_limits=axis_limits,
     )
 
     print_group_summary(groups)
