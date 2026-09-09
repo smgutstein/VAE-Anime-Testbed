@@ -338,6 +338,20 @@ class VAE_Trainer:
                         val_result.n_images,
                     )
 
+                if (
+                    self.cfg.checkpoint_every_epochs > 0
+                    and epoch > 0
+                    and epoch % self.cfg.checkpoint_every_epochs == 0
+                ):
+                    checkpoint_dir = self.output_dir / "checkpoints"
+                    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+                    checkpoint_path = (
+                        checkpoint_dir
+                        / f"epoch_{epoch:04d}_step_{step:04d}.weights.h5"
+                    )
+                    self.vae.vae_net.save_weights(checkpoint_path, overwrite=True)
+                    logging.info("Saved periodic VAE checkpoint to %s", checkpoint_path)
+
             logging.info("End Time %s" % ctime())
             delta_time = str(timedelta(seconds=time() - start_time))
             logging.info("Running Time %s", delta_time)

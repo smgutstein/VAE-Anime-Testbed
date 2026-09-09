@@ -103,6 +103,7 @@ def make_config_ini_text(
     learning_rate="0.001",
     parent_dir="/tmp/vae_test_output",
     save_net="false",
+    save_ref_vae="false",
     expt_name=None,
     data_dir="/tmp/vae_test_data",
     batch_size="32",
@@ -123,6 +124,7 @@ def make_config_ini_text(
     tripwire_lr_floor="1e-6",
     max_consecutive_tripwires="3",
     snapshot_every="100",
+    checkpoint_every_epochs="0",
     train_preview_count="4",
     valid_preview_count="4",
     take_initial_snapshot="false",
@@ -167,6 +169,7 @@ def make_config_ini_text(
         parts.append("[Output_Parameters]")
         parts.append(f"parent_dir = {parent_dir}")
         parts.append(f"save_net = {save_net}")
+        parts.append(f"save_ref_vae = {save_ref_vae}")
         if expt_name is not None:
             parts.append(f"expt_name = {expt_name}")
 
@@ -204,6 +207,7 @@ def make_config_ini_text(
     if include_monitoring:
         parts.append("[Monitoring_Parameters]")
         parts.append(f"snapshot_every = {snapshot_every}")
+        parts.append(f"checkpoint_every_epochs = {checkpoint_every_epochs}")
         parts.append(f"train_preview_count = {train_preview_count}")
         parts.append(f"valid_preview_count = {valid_preview_count}")
         parts.append(f"take_initial_snapshot = {take_initial_snapshot}")

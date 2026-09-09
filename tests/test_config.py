@@ -14,6 +14,7 @@ class TestConfigLoading:
         assert cfg.max_kl_weight == 10.0
         assert cfg.kl_weight_update_factor == 1.2
         assert cfg.active_dim_kl_threshold == pytest.approx(0.01)
+        assert cfg.save_ref_vae is False
 
     def test_config_loads_with_legacy_kl_names(self, tmp_path):
         from VAE_Anime_Config import TrainerConfig
@@ -128,6 +129,23 @@ class TestTrainerConfig:
         )
         cfg = self.TrainerConfig.from_file(cfg_file)
         assert cfg.active_dim_kl_threshold == pytest.approx(0.025)
+
+
+    def test_save_ref_vae_is_configurable(self, tmp_path):
+        cfg_file = write_config_text(
+            tmp_path,
+            make_config_ini_text(save_ref_vae="true"),
+        )
+        cfg = self.TrainerConfig.from_file(cfg_file)
+        assert cfg.save_ref_vae is True
+
+    def test_checkpoint_every_epochs_is_configurable(self, tmp_path):
+        cfg_file = write_config_text(
+            tmp_path,
+            make_config_ini_text(checkpoint_every_epochs="50"),
+        )
+        cfg = self.TrainerConfig.from_file(cfg_file)
+        assert cfg.checkpoint_every_epochs == 50
 
     def test_adaptive_kl_fields_have_correct_types(self, tmp_path):
         cfg_file = write_config_text(tmp_path, make_config_ini_text(

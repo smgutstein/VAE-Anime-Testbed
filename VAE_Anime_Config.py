@@ -90,6 +90,7 @@ class TrainerConfig:
 
     # Monitoring
     snapshot_every: int
+    checkpoint_every_epochs: int
     flush_every_epochs: int
     validate_every_epochs: int
     train_preview_count: int
@@ -219,6 +220,11 @@ class TrainerConfig:
 
             # Monitoring
             snapshot_every=config.getint("Monitoring_Parameters", "snapshot_every"),
+            checkpoint_every_epochs=config.getint(
+                "Monitoring_Parameters",
+                "checkpoint_every_epochs",
+                fallback=-1,
+            ),
             flush_every_epochs=config.getint(
                 "Monitoring_Parameters", "flush_every_epochs", fallback=100
             ),
@@ -327,6 +333,8 @@ class TrainerConfig:
 
         if self.snapshot_every <= 0:
             raise ValueError("snapshot_every must be > 0")
+        if self.checkpoint_every_epochs < 0:
+            raise ValueError("checkpoint_every_epochs must be >= 0")
         if self.flush_every_epochs <= 0:
             raise ValueError("flush_every_epochs must be > 0")
         if self.validate_every_epochs <= 0:
