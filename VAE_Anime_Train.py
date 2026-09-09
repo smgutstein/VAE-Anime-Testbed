@@ -19,6 +19,7 @@ from VAE_Anime_ExperimentRun import ExperimentRun
 from VAE_Anime_Full_Model import VAE_Model
 from VAE_Anime_LossPolicy import build_loss_policy
 from VAE_Anime_RunArtifacts import write_run_summary
+from VAE_Anime_ReferenceVAE import BestSSIMReferenceSaver
 from VAE_Anime_Snapshotter import VAESnapshotter
 from VAE_Anime_StepGuard import StepGuard, StepResult
 from VAE_Anime_Training_Monitor import TrainingMonitor
@@ -112,6 +113,12 @@ class VAE_Trainer:
         )
 
         self.loss_policy = build_loss_policy(self.cfg)
+
+        self.reference_saver = (
+            BestSSIMReferenceSaver(self.output_dir, self.cfg)
+            if self.cfg.save_ref_vae
+            else None
+        )
 
         # Trip-wire state
         self.prev_kl_tensor = tf.Variable(1.0, dtype=tf.float32, trainable=False)
@@ -300,12 +307,21 @@ class VAE_Trainer:
                         active_dim_kl_threshold=self.cfg.active_dim_kl_threshold,
                         seed=self.cfg.seed,
                     )
+                    validation_kl_weight = float(self.loss_policy.current_value())
                     self.monitor.record_validation(
                         epoch=epoch,
                         step=step,
-                        kl_weight=float(self.loss_policy.current_value()),
+                        kl_weight=validation_kl_weight,
                         result=val_result,
                     )
+                    if self.reference_saver is not None:
+                        self.reference_saver.consider(
+                            vae=self.vae,
+                            val_result=val_result,
+                            epoch=epoch,
+                            step=step,
+                            kl_weight=validation_kl_weight,
+                        )
                     logging.info(
                         "Validation epoch %d: recon_mu=%.4f recon_sampled=%.4f "
                         "kl=%.4e ssim_mu=%.4f active_dims=%d "

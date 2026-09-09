@@ -70,6 +70,7 @@ class TrainerConfig:
     # Output
     parent_dir: Path
     save_net: bool
+    save_ref_vae: bool
     expt_name: str | None
 
     # Data
@@ -192,6 +193,10 @@ class TrainerConfig:
             # Output
             parent_dir=get_parent_dir(config),
             save_net=parse_bool(config.get("Output_Parameters", "save_net"), "save_net"),
+            save_ref_vae=parse_bool(
+                config.get("Output_Parameters", "save_ref_vae", fallback="false"),
+                "save_ref_vae",
+            ),
             expt_name=config.get("Output_Parameters","expt_name",fallback=None),
 
             # Data
