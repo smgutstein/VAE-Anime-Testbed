@@ -124,7 +124,7 @@ def make_config_ini_text(
     tripwire_lr_floor="1e-6",
     max_consecutive_tripwires="3",
     snapshot_every="100",
-    checkpoint_every_epochs="0",
+    checkpoint_every_epochs="-1",
     train_preview_count="4",
     valid_preview_count="4",
     take_initial_snapshot="false",
