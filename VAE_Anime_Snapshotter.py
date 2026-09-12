@@ -21,7 +21,7 @@ class VAESnapshotter:
         self.latent_dim = int(latent_dim)
 
         # Keep fixed examples / seeds so successive snapshots are comparable
-        self.fixed_test_img_idxs = None
+        self.fixed_validation_images = None
         self.fixed_gen_img_seeds = tf.random.normal(shape=[4, self.latent_dim])
 
     def save_snapshot(
@@ -43,63 +43,63 @@ class VAESnapshotter:
             Row 3: decoder outputs from zero latent vectors
             Row 4: decoder outputs from random latent vectors
 
-        First 4 columns are fixed across calls when possible.
-        Last 4 columns are random each call.
+        All validation inputs are fixed across calls. For generated images,
+        the first 4 latent seeds are fixed and the remaining seeds are random.
         """
 
-        # Get 1 batch from validation set and convert to numpy
-        test_dataset = validation_dataset.take(1)
-        output_samples = next(iter(test_dataset)).numpy()
+        # Cache only the validation images displayed in snapshots.  Reusing this
+        # small fixed batch avoids decoding a validation batch and running all
+        # of it through the VAE for every snapshot.
+        if self.fixed_validation_images is None:
+            test_dataset = validation_dataset.take(1)
+            validation_batch = next(iter(test_dataset))
+            batch_size = int(tf.shape(validation_batch)[0])
+            if batch_size == 0:
+                raise RuntimeError("Validation batch is empty; cannot create VAE snapshot")
 
-        batch_size = output_samples.shape[0]
-        if batch_size == 0:
-            raise RuntimeError("Validation batch is empty; cannot create VAE snapshot")
-
-        # VAE reconstructions
-        vae_predicted, _, _ = vae_net.predict(output_samples, verbose=0)
-
-        # 4 fixed indices + 4 random indices, clipped by batch size
-        fixed_count = min(4, batch_size)
-        rnd_count = min(4, batch_size)
-
-        # Initialize fixed indices once, or reinitialize if batch size changed
-        if self.fixed_test_img_idxs is None or len(self.fixed_test_img_idxs) != fixed_count:
-            self.fixed_test_img_idxs = np.random.choice(
-                batch_size, size=fixed_count, replace=False
+            snapshot_count = min(8, batch_size)
+            self.fixed_validation_images = tf.identity(
+                validation_batch[:snapshot_count]
             )
 
-        # Random indices each snapshot
-        rnd_test_img_idxs = np.random.choice(
-            batch_size, size=rnd_count, replace=False
-        )
+        output_samples = self.fixed_validation_images
 
-        test_img_idxs = np.concatenate([self.fixed_test_img_idxs, rnd_test_img_idxs])
+        # VAE reconstructions
+        vae_predicted, _, _ = vae_net(output_samples, training=False)
+
+        num_idxs = int(tf.shape(output_samples)[0])
+        fixed_count = min(4, num_idxs)
+        rnd_count = num_idxs - fixed_count
 
         # Decoder outputs from zero latent vectors
-        avg_img_seeds = tf.zeros(shape=[len(test_img_idxs), self.latent_dim])
-        avg_images = decoder_net.predict(avg_img_seeds, verbose=0)
+        avg_img_seeds = tf.zeros(shape=[num_idxs, self.latent_dim])
+        avg_images = decoder_net(avg_img_seeds, training=False)
 
         # Decoder outputs from fixed + random latent vectors
         rnd_gen_img_seeds = tf.random.normal(shape=[rnd_count, self.latent_dim])
         gen_img_seeds = tf.concat(
             [self.fixed_gen_img_seeds[:fixed_count], rnd_gen_img_seeds], axis=0
         )
-        gen_images = decoder_net.predict(gen_img_seeds, verbose=0)
+        gen_images = decoder_net(gen_img_seeds, training=False)
 
-        num_idxs = len(test_img_idxs)
+        output_samples = np.asarray(output_samples)
+        vae_predicted = np.asarray(vae_predicted)
+        avg_images = np.asarray(avg_images)
+        gen_images = np.asarray(gen_images)
+
         fig = plt.figure(figsize=(8, 5))
 
-        for ctr, idx in enumerate(test_img_idxs):
+        for ctr in range(num_idxs):
             # Row 1: input image
             plt.subplot(4, num_idxs, ctr + 1)
-            img1 = output_samples[idx, :, :, :] * 255
+            img1 = output_samples[ctr, :, :, :] * 255
             img1 = img1.astype("int32")
             plt.axis("off")
             plt.imshow(img1)
 
             # Row 2: reconstruction
             plt.subplot(4, num_idxs, ctr + 1 + num_idxs)
-            img2 = vae_predicted[idx, :, :, :] * 255
+            img2 = vae_predicted[ctr, :, :, :] * 255
             img2 = img2.astype("int32")
             plt.axis("off")
             plt.imshow(img2)
