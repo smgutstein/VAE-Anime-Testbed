@@ -90,3 +90,41 @@ def test_strict_reproducibility_flags_are_set(tmp_path):
     assert ds.num_parallel_calls == 1
     assert ds.prefetch_buffer == 1
     assert ds.reshuffle_each_iteration is True
+
+
+def test_train_validation_membership_is_independent_of_experiment_seed(tmp_path):
+    if not hasattr(tf, "io"):
+        pytest.skip("This test requires a real TensorFlow install with tf.io")
+
+    data_dir = tmp_path / "anime_data"
+    images_dir = data_dir / "images"
+    _write_fake_images(images_dir, count=20)
+
+    def make_dataset(seed):
+        ds = Datasets(
+            output_dir=tmp_path / f"out_{seed}",
+            seed=seed,
+            data_dir=data_dir,
+            strict_reproducibility=True,
+        )
+        ds.set_data_params(
+            batch_size=4,
+            image_size=8,
+            val_split=0.25,
+            shuffle_buffer=32,
+            train_drop_remainder=False,
+        )
+        ds.data_downloaded = True
+        ds.make_train_and_validation_sets()
+        return ds
+
+    ds1 = make_dataset(111)
+    ds2 = make_dataset(999)
+
+    # Different experiment seeds may change training ORDER, but they must not
+    # change which files belong to training or validation.
+    assert ds1.train_paths == ds2.train_paths
+    assert ds1.val_paths == ds2.val_paths
+
+    assert set(ds1.train_paths).isdisjoint(ds1.val_paths)
+    assert len(ds1.train_paths) + len(ds1.val_paths) == 20
