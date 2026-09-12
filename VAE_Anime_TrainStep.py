@@ -3,6 +3,9 @@ import tensorflow as tf
 from VAE_Anime_StepGuard import StepResult
 
 
+TRAIN_SSIM_MONITOR_SAMPLE_SIZE = 32
+
+
 @tf.function(reduce_retracing=True)
 def train_step(
     x_batch_train,
@@ -19,8 +22,16 @@ def train_step(
         reconstructed, mu, log_var = model(x_batch_train)
 
         loss_recon = loss_fn(x_batch_train, reconstructed) * num_input_pixels
+        # SSIM is currently a monitoring metric, not part of loss_tot.  Limit
+        # it to a small deterministic slice of the shuffled training batch.
+        # A future SSIM reconstruction loss should use the complete batch and
+        # can reuse that full-batch value for monitoring.
         recon_ssim = tf.reduce_mean(
-            tf.image.ssim(x_batch_train, reconstructed, max_val=1.0)
+            tf.image.ssim(
+                x_batch_train[:TRAIN_SSIM_MONITOR_SAMPLE_SIZE],
+                reconstructed[:TRAIN_SSIM_MONITOR_SAMPLE_SIZE],
+                max_val=1.0,
+            )
         )
 
         kl_by_sample_and_dim = -0.5 * (
