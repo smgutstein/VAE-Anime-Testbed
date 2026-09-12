@@ -11,6 +11,11 @@ import zipfile
 from utils import setup_logging
 
 
+# Keep train/validation MEMBERSHIP fixed across experiments.  Experiment seeds
+# should affect model initialization and training-order shuffling, not which
+# images are assigned to validation.
+TRAIN_VALIDATION_SPLIT_SEED = 1066
+
 
 class Datasets():
     ''' This class is used to download and display images to be for a VAE model.
@@ -163,19 +168,25 @@ class Datasets():
             raise RuntimeError(f"No images found in {self.data_dir / 'images'}")
 
 
-        # shuffle the paths reproducibly if a seed was supplied
-        if self.seed is None:
-            random.shuffle(paths)
-        else:
-            rng = random.Random(self.seed)
-            rng.shuffle(paths)
+        # Use a FIXED seed for train/validation membership.  The experiment
+        # seed must not decide which images are held out, otherwise an image
+        # can be validation data for one experiment but training data for
+        # another.  self.seed is still used below for the per-epoch training
+        # shuffle, so different experiment seeds retain different batch orders.
+        split_rng = random.Random(TRAIN_VALIDATION_SPLIT_SEED)
+        split_rng.shuffle(paths)
 
-        # split the paths list into training and validation sets.
+        # Split the fixed membership into training and validation sets.
         paths_len = len(paths)
         train_paths_len = int(paths_len * (1 - self.val_split))
 
         train_paths = paths[:train_paths_len]
         val_paths = paths[train_paths_len:]
+
+        # Expose the exact membership for tests, diagnostics, and later
+        # evaluation code.  Tuples discourage accidental mutation.
+        self.train_paths = tuple(train_paths)
+        self.val_paths = tuple(val_paths)
 
         # check enough data loaded
         if len(train_paths) == 0:
@@ -235,8 +246,9 @@ class Datasets():
         self.validation_dataset = validation_dataset
         self.datasets_made = True
         logging.info(
-            'Dataset mode: strict_reproducibility=%s, num_parallel_calls=%s, prefetch_buffer=%s, reshuffle_each_iteration=%s, effective_shuffle_buffer=%s',
+            'Dataset mode: strict_reproducibility=%s, split_seed=%s, num_parallel_calls=%s, prefetch_buffer=%s, reshuffle_each_iteration=%s, effective_shuffle_buffer=%s',
             self.strict_reproducibility,
+            TRAIN_VALIDATION_SPLIT_SEED,
             self.num_parallel_calls,
             self.prefetch_buffer,
             self.reshuffle_each_iteration,

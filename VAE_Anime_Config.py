@@ -333,8 +333,10 @@ class TrainerConfig:
 
         if self.snapshot_every <= 0:
             raise ValueError("snapshot_every must be > 0")
-        if self.checkpoint_every_epochs < 0:
-            raise ValueError("checkpoint_every_epochs must be >= 0")
+        if self.checkpoint_every_epochs == 0 or self.checkpoint_every_epochs < -1:
+            raise ValueError(
+                "checkpoint_every_epochs must be -1 (disabled) or > 0"
+            )
         if self.flush_every_epochs <= 0:
             raise ValueError("flush_every_epochs must be > 0")
         if self.validate_every_epochs <= 0:
