@@ -14,15 +14,19 @@ class VAESnapshotter:
     VAE_Trainer.snapshot_vae_behavior() logic, with minimal behavior change.
     """
 
-    def __init__(self, raw_image_dir, latent_dim):
+    def __init__(self, raw_image_dir, latent_dim, random_seed=0):
         self.raw_image_dir = Path(raw_image_dir)
         self.raw_image_dir.mkdir(parents=True, exist_ok=True)
 
         self.latent_dim = int(latent_dim)
+        self.random_seed = int(random_seed)
 
         # Keep fixed examples / seeds so successive snapshots are comparable
         self.fixed_validation_images = None
-        self.fixed_gen_img_seeds = tf.random.normal(shape=[4, self.latent_dim])
+        self.fixed_gen_img_seeds = tf.random.stateless_normal(
+            shape=[4, self.latent_dim],
+            seed=[self.random_seed, -1],
+        )
 
     def save_snapshot(
         self,
@@ -76,7 +80,10 @@ class VAESnapshotter:
         avg_images = decoder_net(avg_img_seeds, training=False)
 
         # Decoder outputs from fixed + random latent vectors
-        rnd_gen_img_seeds = tf.random.normal(shape=[rnd_count, self.latent_dim])
+        rnd_gen_img_seeds = tf.random.stateless_normal(
+            shape=[rnd_count, self.latent_dim],
+            seed=[self.random_seed + int(epoch), int(step) + 1],
+        )
         gen_img_seeds = tf.concat(
             [self.fixed_gen_img_seeds[:fixed_count], rnd_gen_img_seeds], axis=0
         )

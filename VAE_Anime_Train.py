@@ -23,6 +23,13 @@ from VAE_Anime_ReferenceVAE import BestSSIMReferenceSaver
 from VAE_Anime_Snapshotter import VAESnapshotter
 from VAE_Anime_StepGuard import StepGuard, StepResult
 from VAE_Anime_Training_Monitor import TrainingMonitor
+from VAE_Anime_TrainingCheckpoint import (
+    load_resume_metadata,
+    preserve_and_rollback_artifacts,
+    resolve_training_checkpoint,
+    restore_training_checkpoint,
+    save_training_checkpoint,
+)
 from VAE_Anime_TrainStep import train_step, build_step_result
 from VAE_Anime_Validate import evaluate_validation_set
 
@@ -56,7 +63,14 @@ class VAE_Trainer:
 
     mse_loss = tf.keras.losses.MeanSquaredError()
 
-    def __init__(self, config_file="config.ini"):
+    def __init__(
+        self,
+        config_file="config.ini",
+        *,
+        resume_expt=None,
+        resume_parent_dir=None,
+        resume_checkpoint=None,
+    ):
         # Load typed training params from config file
         self.cfg = TrainerConfig.from_file(config_file)
 
@@ -68,7 +82,15 @@ class VAE_Trainer:
         )
 
         # Set up experiment/run artifacts
-        self.run = ExperimentRun.create(self.cfg)
+        self.is_resuming = resume_expt is not None
+        self.run = (
+            ExperimentRun.resume(
+                resume_parent_dir if resume_parent_dir is not None else self.cfg.parent_dir,
+                resume_expt,
+            )
+            if self.is_resuming
+            else ExperimentRun.create(self.cfg)
+        )
         self.curr_expt = self.run.expt_num
         self.output_dir = self.run.output_dir
         self.raw_image_dir = self.run.raw_image_dir
@@ -84,6 +106,7 @@ class VAE_Trainer:
             encode_dense_units=self.cfg.encode_dense_units,
             kernel_size=self.cfg.kernel_size,
             output_dir=self.model_info_dir,
+            random_seed=self.cfg.seed,
         )
 
         # Initialize datasets
@@ -106,6 +129,7 @@ class VAE_Trainer:
         self.snapshotter = VAESnapshotter(
             raw_image_dir=self.raw_image_dir,
             latent_dim=self.vae.latent_dim,
+            random_seed=self.cfg.seed,
         )
 
         self.optimizer = tf.keras.optimizers.Adam(
@@ -133,6 +157,7 @@ class VAE_Trainer:
         self.monitor = TrainingMonitor(
             stats_dir=self.stats_dir,
             snapshot_every=self.cfg.snapshot_every,
+            append=self.is_resuming,
         )
 
         self.step_guard = StepGuard(
@@ -148,6 +173,61 @@ class VAE_Trainer:
             max_log_var_threshold=self.cfg.step_guard_max_log_var_threshold,
         )
 
+        self.start_epoch = 0
+        self.resume_info = None
+        if self.is_resuming:
+            self._restore_for_resume(
+                resume_checkpoint=resume_checkpoint,
+            )
+
+    def _restore_for_resume(self, *, resume_checkpoint):
+        checkpoint_path = resolve_training_checkpoint(
+            self.output_dir,
+            resume_checkpoint,
+        )
+
+        self.optimizer.build(self.vae.vae_net.trainable_weights)
+        payload = load_resume_metadata(checkpoint_path)
+        preserve_and_rollback_artifacts(
+            self.output_dir,
+            payload["artifact_sizes"],
+            int(payload["epoch"]),
+        )
+        payload = restore_training_checkpoint(
+            checkpoint_dir=checkpoint_path,
+            vae_net=self.vae.vae_net,
+            optimizer=self.optimizer,
+            prev_kl_tensor=self.prev_kl_tensor,
+            beta_factor=self.beta_factor,
+            loss_policy=self.loss_policy,
+            step_guard=self.step_guard,
+        )
+        self.start_epoch = int(payload["next_epoch"])
+        self.resume_info = {
+            "kind": "full_training_state",
+            "checkpoint": str(checkpoint_path),
+            "checkpoint_epoch": int(payload["epoch"]),
+            "checkpoint_step": int(payload["step"]),
+            "start_epoch": self.start_epoch,
+            "randomness_note": payload["randomness_note"],
+        }
+
+        if self.start_epoch >= self.cfg.epochs:
+            raise ValueError(
+                f"Checkpoint resumes at epoch {self.start_epoch}, but configured "
+                f"epochs={self.cfg.epochs}; increase the final epoch target"
+            )
+        with (self.output_dir / "Notes.txt").open("a", encoding="utf-8") as fh:
+            fh.write("\nRestart\n")
+            fh.write(f"Checkpoint: {self.resume_info['checkpoint']}\n")
+            fh.write(f"Resume kind: {self.resume_info['kind']}\n")
+            fh.write(f"Restarting at epoch: {self.start_epoch}\n")
+        logging.info(
+            "Restored %s; continuing at epoch %d",
+            checkpoint_path,
+            self.start_epoch,
+        )
+
 
     def train_loop(self):
         start_time = time()
@@ -161,14 +241,16 @@ class VAE_Trainer:
 
         self.monitor.open()
         try:
-            for epoch in range(self.cfg.epochs):
+            for epoch in range(self.start_epoch, self.cfg.epochs):
                 logging.info("Start of epoch %d of %d at %s" % (epoch, self.cfg.epochs, ctime()))
 
                 if (epoch + 1) % self.cfg.flush_every_epochs == 0:
                     self.monitor.flush()
                     logging.info("File Buffers Flushed")
 
-                for step, x_batch_train in enumerate(self.data.training_dataset):
+                training_dataset = self.data.training_dataset_for_epoch(epoch)
+                for step, x_batch_train in enumerate(training_dataset):
+                    self.vae.encoder.sampling_layer.set_training_position(epoch, step)
                     self.beta_factor.assign(self.loss_policy.current_value())
                     curr_kl_weight_before_update = float(self.loss_policy.current_value())
 
@@ -343,6 +425,9 @@ class VAE_Trainer:
                     and epoch > 0
                     and epoch % self.cfg.checkpoint_every_epochs == 0
                 ):
+                    # The recorded byte offsets must describe fully flushed
+                    # artifacts so a restart can roll back any later tail.
+                    self.monitor.flush()
                     checkpoint_dir = self.output_dir / "checkpoints"
                     checkpoint_dir.mkdir(parents=True, exist_ok=True)
                     checkpoint_path = (
@@ -351,6 +436,17 @@ class VAE_Trainer:
                     )
                     self.vae.vae_net.save_weights(checkpoint_path, overwrite=True)
                     logging.info("Saved periodic VAE checkpoint to %s", checkpoint_path)
+                    save_training_checkpoint(
+                        output_dir=self.output_dir,
+                        vae_net=self.vae.vae_net,
+                        optimizer=self.optimizer,
+                        prev_kl_tensor=self.prev_kl_tensor,
+                        beta_factor=self.beta_factor,
+                        loss_policy=self.loss_policy,
+                        step_guard=self.step_guard,
+                        epoch=epoch,
+                        step=step,
+                    )
 
             logging.info("End Time %s" % ctime())
             delta_time = str(timedelta(seconds=time() - start_time))
@@ -382,6 +478,7 @@ class VAE_Trainer:
                 final_kl=last_kl,
                 final_kl_weight=last_kl_weight,
                 tripwire_report=guard_report,
+                resume_info=self.resume_info,
             )
 
         except Exception as e:
@@ -402,6 +499,7 @@ class VAE_Trainer:
                 final_kl_weight=last_kl_weight,
                 tripwire_report=guard_report,
                 error_message=str(e),
+                resume_info=self.resume_info,
             )
             raise
 
@@ -417,19 +515,52 @@ def main(argv=None):
     parser.add_argument(
         '-c', '--config_file',
         type=str,
-        default='config.ini',
+        default=None,
         help='Config file path or config filename inside ./configs'
+    )
+    parser.add_argument(
+        "--resume_expt",
+        type=int,
+        default=None,
+        help="Resume inside this existing experiment directory",
+    )
+    parser.add_argument(
+        "--parent_dir",
+        type=Path,
+        default=Path("expts"),
+        help="Experiment parent used to locate --resume_expt",
+    )
+    parser.add_argument(
+        "--resume_checkpoint",
+        type=Path,
+        default=None,
+        help="Full-state checkpoint name or path; defaults to the latest complete checkpoint",
     )
     parser.add_argument("--log", default="INFO", help="Logging level")
 
     args = parser.parse_args()
     setup_logging(args.log)
 
-    vae = VAE_Trainer(args.config_file)
+    if args.resume_expt is not None:
+        if args.config_file is not None:
+            parser.error("Do not combine --config_file with --resume_expt")
+        config_file = args.parent_dir / f"expt_{args.resume_expt}" / "config.ini"
+    else:
+        if args.resume_checkpoint is not None:
+            parser.error("Checkpoint options require --resume_expt")
+        config_file = args.config_file or "config.ini"
+
+    vae = VAE_Trainer(
+        config_file,
+        resume_expt=args.resume_expt,
+        resume_parent_dir=args.parent_dir,
+        resume_checkpoint=args.resume_checkpoint,
+    )
     vae.vae.show_model()
-    vae.data.display_sample_data('t', vae.cfg.train_preview_count)
-    vae.data.display_sample_data('v', vae.cfg.valid_preview_count)
-    if vae.cfg.take_initial_snapshot:
+    if not vae.is_resuming:
+        vae.data.display_sample_data('t', vae.cfg.train_preview_count)
+        vae.data.display_sample_data('v', vae.cfg.valid_preview_count)
+    if vae.cfg.take_initial_snapshot and not vae.is_resuming:
         vae.snapshotter.save_snapshot(
             validation_dataset=vae.data.validation_dataset,
             vae_net=vae.vae.vae_net,
@@ -439,7 +570,7 @@ def main(argv=None):
 
     if vae.cfg.run_analysis:
         logging.info("Starting to analyze results....")
-        ar = AnalyzeResults(args.config_file, vae.curr_expt)
+        ar = AnalyzeResults(config_file, vae.curr_expt)
         ar.make_singleton_graphs()
         ar.movie_builder.make_images_movie()
         ar.make_pareto_curve_graph()

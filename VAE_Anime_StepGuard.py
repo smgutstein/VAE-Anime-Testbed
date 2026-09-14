@@ -104,6 +104,25 @@ class StepGuard:
         self.kl_abs_threshold = float(kl_abs_threshold)
         self.max_log_var_threshold = float(max_log_var_threshold)
 
+    def get_state(self):
+        return {
+            "consecutive_tripwires": self.consecutive_tripwires,
+            "total_tripwires": self.total_tripwires,
+            "tripwire_events": self.tripwire_events,
+            "initial_learning_rate": self.initial_learning_rate,
+            "min_learning_rate_seen": self.min_learning_rate_seen,
+        }
+
+    def set_state(self, state):
+        self.consecutive_tripwires = int(state["consecutive_tripwires"])
+        self.total_tripwires = int(state["total_tripwires"])
+        self.tripwire_events = list(state["tripwire_events"])
+        self.initial_learning_rate = float(state["initial_learning_rate"])
+        self.min_learning_rate_seen = float(state["min_learning_rate_seen"])
+        # recent_good_steps deliberately starts empty. It contains batches and
+        # latent tensors used only for crash diagnostics, not training state.
+        self.recent_good_steps.clear()
+
     def handle_step(self, result: StepResult) -> GuardDecision:
         loss_bad = self._loss_bad(result)
         latent_bad = self._latent_bad(result)

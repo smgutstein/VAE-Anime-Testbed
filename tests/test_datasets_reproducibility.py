@@ -89,7 +89,35 @@ def test_strict_reproducibility_flags_are_set(tmp_path):
 
     assert ds.num_parallel_calls == 1
     assert ds.prefetch_buffer == 1
-    assert ds.reshuffle_each_iteration is True
+    assert ds.reshuffle_each_iteration is False
+
+
+def test_epoch_specific_order_repeats_after_dataset_recreation(tmp_path):
+    if not hasattr(tf, "io"):
+        pytest.skip("This test requires a real TensorFlow install with tf.io")
+
+    data_dir = tmp_path / "anime_data"
+    _write_fake_images(data_dir / "images", count=20)
+
+    def build(output_dir):
+        ds = Datasets(
+            output_dir=output_dir,
+            seed=1234,
+            data_dir=data_dir,
+            strict_reproducibility=True,
+        )
+        ds.set_data_params(4, 8, 0.25, 32, False)
+        ds.data_downloaded = True
+        ds.make_train_and_validation_sets()
+        return ds
+
+    first = build(tmp_path / "out_1")
+    restarted = build(tmp_path / "out_2")
+    epoch_three_a = _dataset_batches_as_arrays(first.training_dataset_for_epoch(3))
+    epoch_three_b = _dataset_batches_as_arrays(restarted.training_dataset_for_epoch(3))
+
+    for batch_a, batch_b in zip(epoch_three_a, epoch_three_b):
+        np.testing.assert_array_equal(batch_a, batch_b)
 
 
 def test_train_validation_membership_is_independent_of_experiment_seed(tmp_path):

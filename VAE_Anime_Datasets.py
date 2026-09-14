@@ -48,11 +48,10 @@ class Datasets():
         self.num_parallel_calls = 1 if self.strict_reproducibility else tf.data.AUTOTUNE
         self.prefetch_buffer = 1 if self.strict_reproducibility else tf.data.AUTOTUNE
 
-        # Keep epoch-to-epoch training variation even in strict reproducibility
-        # mode. With a fixed seed, TensorFlow's shuffle order is still
-        # reproducible across runs, but reshuffle_each_iteration=True avoids
-        # presenting the exact same batch order/composition every epoch.
-        self.reshuffle_each_iteration = True
+        # Each epoch receives its own explicit seed. This avoids depending on
+        # tf.data's hidden reshuffle counter, which cannot be reconstructed
+        # reliably after restarting the Python process.
+        self.reshuffle_each_iteration = False
 
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -216,20 +215,10 @@ class Datasets():
         train_files = list(map(str, train_paths))
         effective_shuffle_buffer = max(self.shuffle_buffer, len(train_files))
 
-        training_dataset = tf.data.Dataset.from_tensor_slices(train_files)
-        training_dataset = training_dataset.shuffle(
-            effective_shuffle_buffer,
-            seed=self.seed,
-            reshuffle_each_iteration=self.reshuffle_each_iteration,
-        )
-        training_dataset = training_dataset.map(
-            map_image,
-            num_parallel_calls=self.num_parallel_calls,
-        )
-        training_dataset = training_dataset.batch(
-            self.batch_size,
-            drop_remainder=self.train_drop_remainder,
-        ).prefetch(self.prefetch_buffer)
+        self._train_files = train_files
+        self._effective_shuffle_buffer = effective_shuffle_buffer
+        self._map_image = map_image
+        training_dataset = self.training_dataset_for_epoch(0)
 
 
         # load the validation image paths into tensors and create batches
@@ -258,6 +247,27 @@ class Datasets():
         logging.info(f'number of batches in the training set: {len(training_dataset)}')
         logging.info(f'number of images in the validation set: {len(val_paths)}')
         logging.info(f'number of batches in the validation set: {len(validation_dataset)}')
+
+    def training_dataset_for_epoch(self, epoch):
+        """Build the deterministic, epoch-specific training permutation."""
+        if not hasattr(self, "_train_files"):
+            raise RuntimeError("Training paths have not been initialized")
+        base_seed = int(self.seed) if self.seed is not None else 0
+        epoch_seed = (base_seed + int(epoch)) % (2**31 - 1)
+        dataset = tf.data.Dataset.from_tensor_slices(self._train_files)
+        dataset = dataset.shuffle(
+            self._effective_shuffle_buffer,
+            seed=epoch_seed,
+            reshuffle_each_iteration=False,
+        )
+        dataset = dataset.map(
+            self._map_image,
+            num_parallel_calls=self.num_parallel_calls,
+        )
+        return dataset.batch(
+            self.batch_size,
+            drop_remainder=self.train_drop_remainder,
+        ).prefetch(self.prefetch_buffer)
 
     def display_train_data(self, size=9):
         self.display_sample_data("train", size)

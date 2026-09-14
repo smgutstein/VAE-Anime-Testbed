@@ -5,6 +5,7 @@ import shutil
 
 from utils import get_git_hash
 from utils import get_next_experiment_dir
+from utils import get_experiment_dir
 from utils import snapshot_source_state
 
 
@@ -56,3 +57,18 @@ class ExperimentRun:
             movies_dir=movies_dir,
             model_info_dir=model_info_dir,
         )
+
+    @classmethod
+    def resume(cls, parent_dir, expt_num):
+        output_dir = get_experiment_dir(parent_dir, expt_num)
+        required = {
+            "raw_image_dir": output_dir / "raw_images",
+            "stats_dir": output_dir / "stats",
+            "movies_dir": output_dir / "movies",
+            "model_info_dir": output_dir / "model_info",
+        }
+        missing = [str(path) for path in required.values() if not path.is_dir()]
+        if missing:
+            raise FileNotFoundError("Incomplete experiment directory: " + ", ".join(missing))
+        logging.info("Resuming Expt %s in %s", expt_num, output_dir)
+        return cls(expt_num=int(expt_num), output_dir=output_dir, **required)

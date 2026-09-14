@@ -136,3 +136,89 @@ class TestTrainStepIntegration:
         assert isinstance(result.applied_update, bool)
         assert result.mu.shape == (4, 4)
         assert result.log_var.shape == (4, 4)
+
+    def test_sampling_is_identical_at_same_training_position(self, tmp_path, tf):
+        vae = self._tiny_vae(tmp_path)
+        x = tf.ones((4, 16, 16, 3), dtype=tf.float32)
+        vae.encoder.sampling_layer.set_training_position(7, 3)
+        first = vae.vae_net(x, training=False)[0]
+        vae.encoder.sampling_layer.set_training_position(7, 3)
+        second = vae.vae_net(x, training=False)[0]
+        np.testing.assert_array_equal(first.numpy(), second.numpy())
+
+    def test_sampling_changes_at_different_training_positions(self, tmp_path, tf):
+        vae = self._tiny_vae(tmp_path)
+        x = tf.ones((4, 16, 16, 3), dtype=tf.float32)
+        vae.encoder.sampling_layer.set_training_position(7, 3)
+        first = vae.vae_net(x, training=False)[0]
+        vae.encoder.sampling_layer.set_training_position(7, 4)
+        second = vae.vae_net(x, training=False)[0]
+        assert not np.array_equal(first.numpy(), second.numpy())
+
+    def test_sampling_seed_state_does_not_change_model_weight_layout(self, tmp_path, tf):
+        vae = self._tiny_vae(tmp_path)
+        assert vae.encoder.sampling_layer.weights == []
+
+    def test_checkpoint_resume_matches_uninterrupted_next_step(self, tmp_path, tf):
+        from VAE_Anime_TrainStep import train_step
+
+        x0 = tf.reshape(
+            tf.linspace(0.0, 1.0, 4 * 16 * 16 * 3),
+            (4, 16, 16, 3),
+        )
+        x1 = tf.reverse(x0, axis=[0])
+
+        uninterrupted = self._tiny_vae(tmp_path / "uninterrupted")
+        uninterrupted_context = _TrainerLikeStub(uninterrupted)
+        optimizer_a = tf.keras.optimizers.Adam(learning_rate=1e-3)
+        optimizer_a.build(uninterrupted.vae_net.trainable_weights)
+        beta_a = tf.Variable(0.5, trainable=False)
+        prev_a = tf.Variable(1.0, trainable=False)
+
+        uninterrupted.encoder.sampling_layer.set_training_position(0, 0)
+        first = train_step(
+            x0, beta_a, prev_a, uninterrupted_context,
+            tf.keras.losses.MeanSquaredError(), optimizer_a,
+        )
+        prev_a.assign(first[1])
+        checkpoint = tf.train.Checkpoint(
+            vae=uninterrupted.vae_net,
+            optimizer=optimizer_a,
+            beta_factor=beta_a,
+            prev_kl=prev_a,
+        )
+        checkpoint_path = checkpoint.write(str(tmp_path / "state"))
+
+        uninterrupted.encoder.sampling_layer.set_training_position(1, 0)
+        train_step(
+            x1, beta_a, prev_a, uninterrupted_context,
+            tf.keras.losses.MeanSquaredError(), optimizer_a,
+        )
+
+        resumed = self._tiny_vae(tmp_path / "resumed")
+        resumed_context = _TrainerLikeStub(resumed)
+        optimizer_b = tf.keras.optimizers.Adam(learning_rate=1e-3)
+        optimizer_b.build(resumed.vae_net.trainable_weights)
+        beta_b = tf.Variable(0.5, trainable=False)
+        prev_b = tf.Variable(1.0, trainable=False)
+        status = tf.train.Checkpoint(
+            vae=resumed.vae_net,
+            optimizer=optimizer_b,
+            beta_factor=beta_b,
+            prev_kl=prev_b,
+        ).restore(checkpoint_path)
+        status.assert_existing_objects_matched()
+
+        resumed.encoder.sampling_layer.set_training_position(1, 0)
+        train_step(
+            x1, beta_b, prev_b, resumed_context,
+            tf.keras.losses.MeanSquaredError(), optimizer_b,
+        )
+
+        for expected, actual in zip(
+            uninterrupted.vae_net.weights,
+            resumed.vae_net.weights,
+        ):
+            np.testing.assert_array_equal(expected.numpy(), actual.numpy())
+        for expected, actual in zip(optimizer_a.variables, optimizer_b.variables):
+            np.testing.assert_array_equal(expected.numpy(), actual.numpy())

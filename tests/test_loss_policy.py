@@ -58,6 +58,17 @@ class TestLossPolicies:
         assert info["policy_name"] == "adaptive_kl"
         assert p.current_value() > 0.01
 
+    def test_adaptive_policy_state_round_trip(self):
+        from VAE_Anime_LossPolicy import AdaptiveKLLossPolicy
+
+        original = AdaptiveKLLossPolicy(0.01, 1.0, 0.1, 10)
+        original.update(0.5, 0.1)
+        original.update(0.6, 0.2)
+        restored = AdaptiveKLLossPolicy(0.01, 1.0, 0.1, 10)
+        restored.set_state(original.get_state())
+
+        assert restored.get_state() == original.get_state()
+
     def test_build_loss_policy(self):
         from VAE_Anime_LossPolicy import build_loss_policy, AdaptiveKLLossPolicy, FixedBetaLossPolicy
 

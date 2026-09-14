@@ -20,6 +20,18 @@ class BestSSIMReferenceSaver:
         self.ref_root = self.output_dir.parent.parent / "ref_vae"
         self.ref_dir = self.ref_root / self.output_dir.name
         self.best_ssim = float("-inf")
+        metadata_path = self.ref_dir / "metadata.json"
+        if metadata_path.is_file():
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                self.best_ssim = float(
+                    metadata["selected_state"]["validation_ssim_mu"]
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                logging.warning(
+                    "Could not recover prior reference-VAE best SSIM from %s",
+                    metadata_path,
+                )
 
     def consider(self, *, vae, val_result, epoch, step, kl_weight):
         """Save ``vae`` if ``val_result.ssim_mu`` is the best seen so far."""

@@ -60,3 +60,18 @@ def test_training_monitor_flushes_buffers_to_artifacts(tmp_path):
     assert len(latent_var.mu_var) == 1
     assert len(latent_var.log_var_var) == 1
     assert len(latent_kl.kl_per_dim) == 1
+
+
+def test_training_monitor_append_preserves_existing_records(tmp_path):
+    from VAE_Anime_ArtifactReader import ArtifactReader
+    from VAE_Anime_Training_Monitor import TrainingMonitor
+
+    stats_dir = tmp_path / "stats"
+    stats_dir.mkdir()
+    for append, value in ((False, 1.0), (True, 2.0)):
+        monitor = TrainingMonitor(stats_dir, snapshot_every=2, append=append)
+        monitor.open()
+        monitor.record_losses(value, 0.1, 0.01)
+        monitor.close()
+
+    assert ArtifactReader(stats_dir).read_loss_series().recon_loss == [1.0, 2.0]

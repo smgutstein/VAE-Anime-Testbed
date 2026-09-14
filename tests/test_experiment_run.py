@@ -36,3 +36,15 @@ def test_experiment_run_create_makes_expected_layout(tmp_path, monkeypatch):
     assert "fakehash" in notes
     assert "fake source snapshot" in notes
     assert "Loss Policy: adaptive_kl" in notes
+
+
+def test_experiment_run_resume_reuses_existing_layout(tmp_path):
+    from VAE_Anime_ExperimentRun import ExperimentRun
+
+    output_dir = tmp_path / "expts" / "expt_7"
+    for name in ("raw_images", "stats", "movies", "model_info"):
+        (output_dir / name).mkdir(parents=True, exist_ok=True)
+
+    run = ExperimentRun.resume(tmp_path / "expts", 7)
+    assert run.expt_num == 7
+    assert run.output_dir == output_dir
