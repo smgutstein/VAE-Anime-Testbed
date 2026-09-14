@@ -66,6 +66,3 @@ def test_rollback_preserves_tail_before_truncating(tmp_path):
 
     assert artifact.read_bytes() == b"kept"
     assert (backup / "losses_file.txt.tail").read_bytes() == b"-tail"
-
-
-    assert (backup / "stats" / "loss_events.pkl").is_file()

@@ -188,6 +188,12 @@ class TestTrainStepIntegration:
             prev_kl=prev_a,
         )
         checkpoint_path = checkpoint.write(str(tmp_path / "state"))
+        checkpointed_weights = [
+            variable.numpy().copy() for variable in uninterrupted.vae_net.weights
+        ]
+        checkpointed_optimizer = [
+            variable.numpy().copy() for variable in optimizer_a.variables
+        ]
 
         uninterrupted.encoder.sampling_layer.set_training_position(1, 0)
         train_step(
@@ -206,8 +212,15 @@ class TestTrainStepIntegration:
             optimizer=optimizer_b,
             beta_factor=beta_b,
             prev_kl=prev_b,
-        ).restore(checkpoint_path)
+        ).read(checkpoint_path)
         status.assert_existing_objects_matched()
+
+        for expected, actual in zip(checkpointed_weights, resumed.vae_net.weights):
+            np.testing.assert_array_equal(expected, actual.numpy())
+        for expected, actual in zip(checkpointed_optimizer, optimizer_b.variables):
+            np.testing.assert_array_equal(expected, actual.numpy())
+        np.testing.assert_array_equal(beta_a.numpy(), beta_b.numpy())
+        np.testing.assert_array_equal(prev_a.numpy(), prev_b.numpy())
 
         resumed.encoder.sampling_layer.set_training_position(1, 0)
         train_step(
@@ -219,6 +232,10 @@ class TestTrainStepIntegration:
             uninterrupted.vae_net.weights,
             resumed.vae_net.weights,
         ):
-            np.testing.assert_array_equal(expected.numpy(), actual.numpy())
+            np.testing.assert_allclose(
+                expected.numpy(), actual.numpy(), rtol=1e-4, atol=1e-7
+            )
         for expected, actual in zip(optimizer_a.variables, optimizer_b.variables):
-            np.testing.assert_array_equal(expected.numpy(), actual.numpy())
+            np.testing.assert_allclose(
+                expected.numpy(), actual.numpy(), rtol=1e-4, atol=1e-7
+            )

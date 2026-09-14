@@ -62,6 +62,11 @@ def test_trainer_smoke_runs_one_tiny_epoch_and_writes_artifacts(tmp_path, monkey
 
     monkeypatch.setattr(Datasets, "download_data", fake_download_data)
     monkeypatch.setattr(Datasets, "make_train_and_validation_sets", fake_make_train_and_validation_sets)
+    monkeypatch.setattr(
+        Datasets,
+        "training_dataset_for_epoch",
+        lambda self, epoch: self.training_dataset,
+    )
     monkeypatch.setattr(VAESnapshotter, "save_snapshot", lambda *args, **kwargs: None)
 
     trainer = VAE_Trainer(str(cfg_file))
