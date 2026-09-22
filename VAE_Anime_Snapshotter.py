@@ -22,6 +22,9 @@ class VAESnapshotter:
 
         # Keep fixed examples / seeds so successive snapshots are comparable
         self.fixed_validation_images = None
+        # Size of the validation batch the pre-caching snapshotter sampled
+        # display indices from; used only to mirror its NumPy RNG draws.
+        self._legacy_batch_size = None
         self.fixed_gen_img_seeds = tf.random.normal(shape=[4, self.latent_dim])
 
     def save_snapshot(
@@ -50,6 +53,14 @@ class VAESnapshotter:
         # Cache only the validation images displayed in snapshots.  Reusing this
         # small fixed batch avoids decoding a validation batch and running all
         # of it through the VAE for every snapshot.
+        # NumPy RNG parity with the pre-caching snapshotter.  The VAE's
+        # Sampling layer takes its op seed from np.random at trace time, and
+        # the initial snapshot runs before train_step is first traced, so any
+        # change in this method's NumPy consumption changes the training noise
+        # stream.  The first call therefore replays the legacy footprint
+        # exactly (predict() on the full batch + fixed/random index draws);
+        # later calls are RNG-neutral apart from the one index draw the legacy
+        # code made per snapshot.
         if self.fixed_validation_images is None:
             test_dataset = validation_dataset.take(1)
             validation_batch = next(iter(test_dataset))
@@ -61,11 +72,27 @@ class VAESnapshotter:
             self.fixed_validation_images = tf.identity(
                 validation_batch[:snapshot_count]
             )
+            self._legacy_batch_size = batch_size
+
+            # Same call as the legacy code, so Keras traces its predict
+            # function (and makes Sampling's NumPy draws) identically.
+            full_predicted, _, _ = vae_net.predict(validation_batch.numpy(), verbose=0)
+            vae_predicted = full_predicted[:snapshot_count]
+
+            legacy_count = min(4, batch_size)
+            np.random.choice(batch_size, size=legacy_count, replace=False)  # legacy fixed idxs
+            np.random.choice(batch_size, size=legacy_count, replace=False)  # legacy random idxs
+        else:
+            # Eager call would draw a fresh Sampling seed from np.random;
+            # the legacy (already-traced) predict path drew nothing here.
+            np_state = np.random.get_state()
+            vae_predicted, _, _ = vae_net(self.fixed_validation_images, training=False)
+            np.random.set_state(np_state)
+
+            legacy_count = min(4, self._legacy_batch_size)
+            np.random.choice(self._legacy_batch_size, size=legacy_count, replace=False)  # legacy random idxs
 
         output_samples = self.fixed_validation_images
-
-        # VAE reconstructions
-        vae_predicted, _, _ = vae_net(output_samples, training=False)
 
         num_idxs = int(tf.shape(output_samples)[0])
         fixed_count = min(4, num_idxs)
