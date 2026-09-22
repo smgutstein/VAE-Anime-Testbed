@@ -6,7 +6,7 @@ LOG_FILE="run_experiments.txt"
 > "$LOG_FILE"
 
 configs=(
-#    config_greedy_beta.ini
+    config_greedy_beta.ini
     config_beta_1.ini
     config_beta_10.ini
     config_beta_100.ini
