@@ -44,6 +44,7 @@ __pycache__/
 # Scratch / temporary project files
 Untitled*.ipynb
 history.txt
+hist.txt
 dataset_reproducibility.patch
 *.patch
 
@@ -53,6 +54,7 @@ configs/config_akl1.ini
 configs/config_akl2.ini
 configs/config_akl_390.ini
 configs/config_akl_412.ini
+configs/config_expt_483.ini
 configs/config_beta.ini
 configs/config_beta_2500.ini
 configs/config_beta_5000.ini
