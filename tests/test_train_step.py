@@ -136,3 +136,7 @@ class TestTrainStepIntegration:
         assert isinstance(result.applied_update, bool)
         assert result.mu.shape == (4, 4)
         assert result.log_var.shape == (4, 4)
+
+    def test_sampling_seed_state_does_not_change_model_weight_layout(self, tmp_path, tf):
+        vae = self._tiny_vae(tmp_path)
+        assert vae.encoder.sampling_layer.weights == []

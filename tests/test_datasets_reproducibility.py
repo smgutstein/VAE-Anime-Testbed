@@ -128,3 +128,25 @@ def test_train_validation_membership_is_independent_of_experiment_seed(tmp_path)
 
     assert set(ds1.train_paths).isdisjoint(ds1.val_paths)
     assert len(ds1.train_paths) + len(ds1.val_paths) == 20
+
+
+def test_training_dataset_for_epoch_is_the_existing_dataset(tmp_path):
+    if not hasattr(tf, "io"):
+        pytest.skip("This test requires a real TensorFlow install with tf.io")
+
+    data_dir = tmp_path / "anime_data"
+    _write_fake_images(data_dir / "images", count=20)
+    ds = Datasets(
+        output_dir=tmp_path / "out",
+        seed=1234,
+        data_dir=data_dir,
+        strict_reproducibility=True,
+    )
+    ds.set_data_params(4, 8, 0.25, 32, False)
+    ds.data_downloaded = True
+    ds.make_train_and_validation_sets()
+
+    # Until epoch-seeded shuffling is adopted, every epoch must iterate the
+    # same reshuffling dataset object, exactly as the training loop did.
+    assert ds.training_dataset_for_epoch(0) is ds.training_dataset
+    assert ds.training_dataset_for_epoch(7) is ds.training_dataset

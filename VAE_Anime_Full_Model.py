@@ -17,7 +17,8 @@ class VAE_Model():
                 filter_factors=(1, 2, 4),
                 encode_dense_units=1024,
                 kernel_size=3,
-                output_dir="scratch_output"):
+                output_dir="scratch_output",
+                random_seed=0):
         self.enc_input_shape = enc_input_shape
 
         # Set model parameters and output directory
@@ -27,6 +28,7 @@ class VAE_Model():
         self.encode_dense_units = encode_dense_units
         self.kernel_size = kernel_size
         self.output_dir = Path(output_dir)
+        self.random_seed = int(random_seed)
 
         # Initialize the encoder, decoder, and VAE
         self.init_encoder()
@@ -44,6 +46,7 @@ class VAE_Model():
             self.encode_dense_units,
             self.kernel_size,
             self.output_dir,
+            self.random_seed,
         )
         self.encoder.set_encoder_model()
 
@@ -104,4 +107,3 @@ if __name__ == '__main__':
     VAE = VAE_Model()
     VAE.init_VAE()
     VAE.show_model()
-

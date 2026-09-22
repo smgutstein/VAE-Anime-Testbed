@@ -259,6 +259,17 @@ class Datasets():
         logging.info(f'number of images in the validation set: {len(val_paths)}')
         logging.info(f'number of batches in the validation set: {len(validation_dataset)}')
 
+    def training_dataset_for_epoch(self, epoch):
+        """Return the training dataset to iterate for ``epoch``.
+
+        Currently this is the single dataset built in
+        make_train_and_validation_sets(); iterating it each epoch reshuffles
+        it exactly as before, so ``epoch`` does not affect the order yet.
+        """
+        if getattr(self, "training_dataset", None) is None:
+            raise RuntimeError("Training dataset has not been initialized")
+        return self.training_dataset
+
     def display_train_data(self, size=9):
         self.display_sample_data("train", size)
 

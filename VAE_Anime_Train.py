@@ -106,6 +106,7 @@ class VAE_Trainer:
             encode_dense_units=self.cfg.encode_dense_units,
             kernel_size=self.cfg.kernel_size,
             output_dir=self.model_info_dir,
+            random_seed=self.cfg.seed,
         )
 
         # Initialize datasets
@@ -263,7 +264,9 @@ class VAE_Trainer:
                     self.monitor.flush()
                     logging.info("File Buffers Flushed")
 
-                for step, x_batch_train in enumerate(self.data.training_dataset):
+                training_dataset = self.data.training_dataset_for_epoch(epoch)
+                for step, x_batch_train in enumerate(training_dataset):
+                    self.vae.encoder.sampling_layer.set_training_position(epoch, step)
                     self.beta_factor.assign(self.loss_policy.current_value())
                     curr_kl_weight_before_update = float(self.loss_policy.current_value())
 

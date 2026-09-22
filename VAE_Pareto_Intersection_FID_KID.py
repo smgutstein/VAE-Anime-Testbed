@@ -471,6 +471,7 @@ def build_vae_from_config(config_path: Path, output_dir: Path) -> tuple[VAE_Mode
         encode_dense_units=cfg.encode_dense_units,
         kernel_size=cfg.kernel_size,
         output_dir=output_dir,
+        random_seed=cfg.seed,
     )
     return vae, cfg
 
@@ -515,7 +516,7 @@ def make_candidate_training_dataset(cfg: TrainerConfig, scratch_dir: Path):
     )
     data.download_data()
     data.make_train_and_validation_sets()
-    return data.training_dataset
+    return data
 
 
 def rederivation_train_step(
@@ -638,7 +639,7 @@ def rederive_to_intersection(
     target_epoch = int(target_record["epoch"])
     target_step = int(target_record["step"])
 
-    training_dataset = make_candidate_training_dataset(
+    training_data = make_candidate_training_dataset(
         cfg,
         scratch_dir=scratch_dir,
     )
@@ -667,6 +668,7 @@ def rederive_to_intersection(
     )
 
     for epoch in range(first_epoch, target_epoch + 1):
+        training_dataset = training_data.training_dataset_for_epoch(epoch)
         for step, x_batch_train in enumerate(training_dataset):
             # If resuming inside the checkpoint epoch, skip batches already
             # represented by the saved checkpoint.
@@ -689,6 +691,7 @@ def rederive_to_intersection(
                 dtype=tf.float32,
             )
 
+            vae.encoder.sampling_layer.set_training_position(epoch, step)
             loss_recon, loss_kl = rederivation_train_step(
                 x_batch_train,
                 kl_weight_tensor,
@@ -1606,7 +1609,7 @@ def evaluate_all_pareto_points(
         key=lambda group: int(group["checkpoint"]["iteration"]),
     )
 
-    training_dataset = make_candidate_training_dataset(
+    training_data = make_candidate_training_dataset(
         cfg,
         scratch_dir=expt_dir / "_fid_kid_pareto_rederive",
     )
@@ -1772,6 +1775,7 @@ def evaluate_all_pareto_points(
             ):
                 print(f"  replaying epoch {epoch} / {final_epoch}")
 
+            training_dataset = training_data.training_dataset_for_epoch(epoch)
             for step, x_batch_train in enumerate(training_dataset):
                 if epoch == cp_epoch and step <= cp_step:
                     continue
@@ -1789,6 +1793,7 @@ def evaluate_all_pareto_points(
                     float(original["kl_weight"]),
                     dtype=tf.float32,
                 )
+                vae.encoder.sampling_layer.set_training_position(epoch, step)
                 loss_recon, loss_kl = compiled_train_step(
                     x_batch_train,
                     kl_weight_tensor,

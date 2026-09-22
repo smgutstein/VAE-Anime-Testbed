@@ -9,6 +9,24 @@ from utils import setup_logging
 
 
 class Sampling(tf.keras.layers.Layer):
+  def __init__(self, seed=0, **kwargs):
+    super().__init__(**kwargs)
+    self.base_seed = int(seed)
+    # Training-position state for epoch/step-keyed sampling.  The current
+    # sampling path does not read these yet, so setting them has no effect on
+    # results.  Keep them out of model.weights so .weights.h5 files are
+    # unaffected.
+    self.epoch_seed = self._no_dependency(
+        tf.Variable(0, dtype=tf.int32, trainable=False)
+    )
+    self.step_seed = self._no_dependency(
+        tf.Variable(-1, dtype=tf.int32, trainable=False)
+    )
+
+  def set_training_position(self, epoch, step):
+    self.epoch_seed.assign(int(epoch))
+    self.step_seed.assign(int(step))
+
   def call(self, inputs):
     """Generates a random sample and combines with the encoder output
     
@@ -36,7 +54,8 @@ class VAE_Encoder:
                  filter_factors=(1, 2, 4),
                  encode_dense_units=1024,
                  kernel_size=3,
-                 output_dir="scratch_output"):
+                 output_dir="scratch_output",
+                 random_seed=0):
         self.enc_input_shape = enc_input_shape
         self.base_filters = base_filters
         self.filter_factors = list(filter_factors)
@@ -44,6 +63,7 @@ class VAE_Encoder:
         self.k_size = kernel_size
         self.latent_dim = latent_dim
         self.output_dir = Path(output_dir)
+        self.random_seed = int(random_seed)
         self.encoder_net = None
         self.num_input_pixels = np.prod(enc_input_shape)
                 
@@ -116,7 +136,8 @@ class VAE_Encoder:
 
         inputs = tf.keras.layers.Input(shape=self.enc_input_shape)
         mu, log_var = self.encoder_layers(inputs)
-        z = Sampling()((mu, log_var))
+        self.sampling_layer = Sampling(seed=self.random_seed)
+        z = self.sampling_layer((mu, log_var))
         self.encoder_net = tf.keras.Model(inputs, 
                                           outputs=[mu, log_var, z],
                                           name="Encoder_Model")
