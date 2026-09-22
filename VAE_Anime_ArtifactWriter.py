@@ -9,8 +9,9 @@ from VAE_Anime_Artifacts import (
 
 
 class ArtifactWriter:
-    def __init__(self, stats_dir):
+    def __init__(self, stats_dir, append=False):
         self.stats_dir = Path(stats_dir)
+        self.append = bool(append)
         self.loss_text_fh = None
         self.val_loss_text_fh = None
         self.loss_events_fh = None
@@ -20,13 +21,15 @@ class ArtifactWriter:
         self.val_latent_stats_fh = None
 
     def open(self):
-        self.loss_text_fh = open(self.stats_dir / LOSS_TEXT_FILE, "w")
-        self.val_loss_text_fh = open(self.stats_dir / VAL_LOSS_TEXT_FILE, "w")
-        self.loss_events_fh = open(self.stats_dir / LOSS_EVENTS_FILE, "wb")
-        self.latent_stats_fh = open(self.stats_dir / LATENT_STATS_FILE, "wb")
-        self.latent_var_stats_fh = open(self.stats_dir / LATENT_VAR_STATS_FILE, "wb")
-        self.latent_kl_stats_fh = open(self.stats_dir / LATENT_KL_STATS_FILE, "wb")
-        self.val_latent_stats_fh = open(self.stats_dir / VAL_LATENT_STATS_FILE, "wb")
+        text_mode = "a" if self.append else "w"
+        binary_mode = "ab" if self.append else "wb"
+        self.loss_text_fh = open(self.stats_dir / LOSS_TEXT_FILE, text_mode)
+        self.val_loss_text_fh = open(self.stats_dir / VAL_LOSS_TEXT_FILE, text_mode)
+        self.loss_events_fh = open(self.stats_dir / LOSS_EVENTS_FILE, binary_mode)
+        self.latent_stats_fh = open(self.stats_dir / LATENT_STATS_FILE, binary_mode)
+        self.latent_var_stats_fh = open(self.stats_dir / LATENT_VAR_STATS_FILE, binary_mode)
+        self.latent_kl_stats_fh = open(self.stats_dir / LATENT_KL_STATS_FILE, binary_mode)
+        self.val_latent_stats_fh = open(self.stats_dir / VAL_LATENT_STATS_FILE, binary_mode)
         return self
 
     def write_loss_text_header(self):

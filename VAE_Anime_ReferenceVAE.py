@@ -11,7 +11,7 @@ import shutil
 class BestSSIMReferenceSaver:
     """Keep the VAE checkpoint with the highest deterministic validation SSIM."""
 
-    def __init__(self, output_dir, cfg):
+    def __init__(self, output_dir, cfg, resume=False):
         self.output_dir = Path(output_dir)
         self.cfg = cfg
         # Reference VAEs live outside the experiment tree:
@@ -20,6 +20,21 @@ class BestSSIMReferenceSaver:
         self.ref_root = self.output_dir.parent.parent / "ref_vae"
         self.ref_dir = self.ref_root / self.output_dir.name
         self.best_ssim = float("-inf")
+        # Only a resumed run may inherit a prior best SSIM.  A fresh run can
+        # reuse an experiment number (e.g. after the latest expt dir was
+        # deleted), and must not be blocked by that deleted run's metadata.
+        metadata_path = self.ref_dir / "metadata.json"
+        if resume and metadata_path.is_file():
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                self.best_ssim = float(
+                    metadata["selected_state"]["validation_ssim_mu"]
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                logging.warning(
+                    "Could not recover prior reference-VAE best SSIM from %s",
+                    metadata_path,
+                )
 
     def consider(self, *, vae, val_result, epoch, step, kl_weight):
         """Save ``vae`` if ``val_result.ssim_mu`` is the best seen so far."""

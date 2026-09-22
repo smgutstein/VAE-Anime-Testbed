@@ -32,6 +32,24 @@ class AdaptiveKLWeightScheduler:
     def current_update_factor(self):
         return self.kl_weight_update_factor
 
+    def get_state(self):
+        return {
+            "kl_weight": self.kl_weight,
+            "kl_weight_update_factor": self.kl_weight_update_factor,
+            "prev_loss_recon": self.prev_loss_recon,
+            "prev_loss_kl": self.prev_loss_kl,
+            "kl_weight_queue": list(self.kl_weight_queue),
+        }
+
+    def set_state(self, state):
+        self.kl_weight = float(state["kl_weight"])
+        self.kl_weight_update_factor = float(state["kl_weight_update_factor"])
+        self.prev_loss_recon = float(state["prev_loss_recon"])
+        self.prev_loss_kl = float(state["prev_loss_kl"])
+        self.kl_weight_queue.clear()
+        self.kl_weight_queue.extend(float(value) for value in state["kl_weight_queue"])
+        self._rebuild_delta_generator()
+
     def update(self, curr_loss_recon, curr_loss_kl):
         """
         Update KL weight based on current losses.

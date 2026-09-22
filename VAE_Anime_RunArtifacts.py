@@ -138,6 +138,7 @@ def write_run_summary(
     final_kl_weight=None,
     error_message=None,
     tripwire_report=None,
+    resume_info=None,
 ):
     summary_path = output_dir / "run_summary.json"
 
@@ -172,6 +173,7 @@ def write_run_summary(
         "start_time": ctime(start_time) if start_time is not None else None,
         "end_time": ctime(end_time) if end_time is not None else None,
         "runtime_seconds": runtime_seconds,
+        "resume": resume_info,
     }
 
     # StepGuard's learning-rate backoff is permanent, so "learning_rate" above

@@ -64,6 +64,14 @@ class BaseLossPolicy(ABC):
             "kl_weight_update_factor": self.current_update_factor(),
         }
 
+    @abstractmethod
+    def get_state(self):
+        pass
+
+    @abstractmethod
+    def set_state(self, state):
+        pass
+
 
 class AdaptiveKLLossPolicy(BaseLossPolicy):
     """
@@ -94,6 +102,14 @@ class AdaptiveKLLossPolicy(BaseLossPolicy):
         update_info = self.kl_scheduler.update(curr_loss_recon, curr_loss_kl)
         update_info["policy_name"] = self.policy_name
         return update_info
+
+    def get_state(self):
+        return {"policy_name": self.policy_name, **self.kl_scheduler.get_state()}
+
+    def set_state(self, state):
+        if state.get("policy_name") != self.policy_name:
+            raise ValueError("Checkpoint loss policy does not match adaptive_kl")
+        self.kl_scheduler.set_state(state)
 
 
 class FixedBetaLossPolicy(BaseLossPolicy):
@@ -134,6 +150,15 @@ class FixedBetaLossPolicy(BaseLossPolicy):
             "update_factor": self.kl_weight_update_factor,
             "update_factor_changed": False,
         }
+
+    def get_state(self):
+        return {"policy_name": self.policy_name, "beta": self.beta}
+
+    def set_state(self, state):
+        if state.get("policy_name") != self.policy_name:
+            raise ValueError("Checkpoint loss policy does not match fixed_beta")
+        if float(state["beta"]) != self.beta:
+            raise ValueError("Checkpoint beta does not match experiment config")
 
 
 def build_loss_policy(cfg):

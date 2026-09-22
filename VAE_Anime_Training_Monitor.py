@@ -12,7 +12,7 @@ class TrainingMonitor:
     knows artifact filenames or on-disk schemas.
     """
 
-    def __init__(self, stats_dir, snapshot_every):
+    def __init__(self, stats_dir, snapshot_every, append=False):
         self.stats_dir = Path(stats_dir)
         self.snapshot_every = int(snapshot_every)
 
@@ -28,12 +28,14 @@ class TrainingMonitor:
         self.log_var_var_list = []
         self.kl_per_dim_list = []
 
-        self.writer = ArtifactWriter(self.stats_dir)
+        self.append = bool(append)
+        self.writer = ArtifactWriter(self.stats_dir, append=self.append)
 
     def open(self):
         self.writer.open()
-        self.writer.write_loss_text_header()
-        self.writer.write_val_loss_text_header()
+        if not self.append:
+            self.writer.write_loss_text_header()
+            self.writer.write_val_loss_text_header()
         return self
 
     def close(self):
