@@ -24,7 +24,7 @@ for config in "${configs[@]}"; do
     SECONDS=0
 
     # Output from the Python program goes normally to the terminal
-    python VAE_Anime_Train.py --config "$config"
+    python VAE_Anime_Train.py --config_file "$config"
     status=$?
 
     elapsed=$SECONDS
