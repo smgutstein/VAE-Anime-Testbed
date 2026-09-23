@@ -81,3 +81,5 @@ ExptTracker.ipynb
 
 ref_vae/*
 pareto_comps/*
+
+run_experiments.txt
