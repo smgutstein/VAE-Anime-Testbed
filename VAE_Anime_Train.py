@@ -21,7 +21,7 @@ from VAE_Anime_LossPolicy import build_loss_policy
 from VAE_Anime_RunArtifacts import write_run_summary
 from VAE_Anime_ReferenceVAE import BestSSIMReferenceSaver
 from VAE_Anime_Snapshotter import VAESnapshotter
-from VAE_Anime_StepGuard import StepGuard, StepResult
+from VAE_Anime_StepGuard import StepGuard, StepResult, TrainingDivergedError
 from VAE_Anime_Training_Monitor import TrainingMonitor
 from VAE_Anime_TrainingCheckpoint import (
     load_resume_metadata,
@@ -34,6 +34,17 @@ from VAE_Anime_TrainStep import train_step, build_step_result
 from VAE_Anime_Validate import evaluate_validation_set
 
 from utils import setup_logging
+
+
+# Exit status for a run that stopped because training diverged (the trip-wire
+# limit was reached, or losses/latents became non-finite). This is an expected
+# experimental outcome rather than a crash: train_loop() has already written
+# run_summary (status="failed") and the trip-wire/crash tensors before this is
+# returned. run_expt.sh treats this code as "record it and continue with the
+# next experiment", while any other nonzero status still stops the batch.
+# 1 is Python's uncaught-exception status and 2 is argparse's usage error,
+# so 3 is unambiguous.
+EXIT_TRAINING_DIVERGED = 3
 
 
 def _set_all_seeds(seed: int, deterministic: bool = False):
@@ -582,7 +593,21 @@ def main(argv=None):
             vae_net=vae.vae.vae_net,
             decoder_net=vae.vae.decoder.decoder_net,
         )
-    vae.train_loop()
+    try:
+        vae.train_loop()
+    except TrainingDivergedError as e:
+        # train_loop() has already saved everything for this run before
+        # re-raising, so exit cleanly with a distinct status instead of a
+        # traceback that a batch runner cannot distinguish from a real bug.
+        logging.error(
+            "Experiment %s diverged: %s. Run summary and trip-wire artifacts "
+            "were saved to %s. Exiting with status %d.",
+            vae.curr_expt,
+            e,
+            vae.output_dir,
+            EXIT_TRAINING_DIVERGED,
+        )
+        return EXIT_TRAINING_DIVERGED
 
     if vae.cfg.run_analysis:
         logging.info("Starting to analyze results....")
